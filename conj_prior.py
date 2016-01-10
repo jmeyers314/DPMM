@@ -213,27 +213,30 @@ class GaussianMeanKnownVariance(ConjugatePrior):
         self.mu_0 = mu_0
         self.sig_0 = sig_0
         self.sig = sig
+        self._norm1 = np.sqrt(2*np.pi*self.sig**2)
+        self._norm2 = np.sqrt(2*np.pi*self.sig_0**2)
 
     def sample(self, size=None):
         """Return a sample `mu` or samples [mu1, mu2, ...] from distribution."""
-        return norm.rvs(loc=self.mu_0, scale=self.sig_0, size=size)
+        return np.random.normal(self.mu_0, self.sig_0, size=size)
 
-    def like1(self, mu, x=None):
-        """Returns likelihood Pr(x | mu), for a single data point.  Returns callable if x is None.
+    def like1(self, mu, x):
+        """Returns likelihood Pr(x | mu), for a single data point.
         """
-        rv = norm(loc=mu, scale=self.sig)
-        if x is None:
-            return rv.pdf
-        else:
-            return rv.pdf(x)
+        return np.exp(-0.5*(x-mu)**2/self.sig**2) / self._norm1
 
     def __call__(self, mu):
         """Returns Pr(mu), i.e., the prior."""
-        return norm(loc=self.mu_0, scale=self.sig_0).pdf(mu)
+        # Slow
+        # return norm(loc=self.mu_0, scale=self.sig_0).pdf(mu)
+        return np.exp(-0.5*(mu-self.mu_0)**2/self.sig_0**2) / self._norm2
 
     def post_params(self, D):
         """Recall D is [NOBS]."""
-        n = len(D)
+        try:
+            n = len(D)
+        except TypeError:
+            n = 1
         Dbar = np.mean(D)
         sigsqr_n = 1./(n/self.sig**2 + 1./self.sig_0**2)
         sig_n = np.sqrt(sigsqr_n)
@@ -242,4 +245,19 @@ class GaussianMeanKnownVariance(ConjugatePrior):
 
     def pred(self, x):
         """Prior predictive.  Pr(x)"""
-        return norm(loc=self.mu_0, scale=np.sqrt(self.sig**2+self.sig_0**2)).pdf(x)
+        # Again, would like to do the following, but it's slow.
+        # return norm(loc=self.mu_0, scale=np.sqrt(self.sig**2+self.sig_0**2)).pdf(x)
+        sig = self.sig**2 + self.sig_0**2
+        return np.exp(-0.5*(x-self.mu_0)**2/sig**2) / (np.sqrt(2*np.pi)*sig)
+
+    def marginal_likelihood(self, D):
+        """Fully marginalized likelihood Pr(D)"""
+        n = len(D)
+        Dbar = np.sum(D)
+        num = self.sig
+        den = (np.sqrt(2*np.pi)*self.sig)**n*np.sqrt(n*self.sig_0**2+self.sig**2)
+        exponent = -np.sum(D**2)/2*self.sig**2 - self.mu_0/(2*self.sig_0**2)
+        expnum = self.sig_0**2*n**2*Dbar**2/self.sig**2 + self.sig**2*self.mu_0**2/self.sig_0**2
+        expnum += 2*n*Dbar*self.mu_0
+        expden = 2*(n*self.sig_0**2+self.sig**2)
+        return num/den*np.exp(exponent+expnum/expden)

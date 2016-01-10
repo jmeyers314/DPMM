@@ -39,6 +39,8 @@ model = conj_prior.GaussianMeanKnownVariance(mu_0, sig_0, sig)
 # Check that we can draw samples from model.
 sample1 = model.sample()
 samples = model.sample(size=10)
+print type(samples)
+print type(samples[0])
 
 # Check that we can evaluate a likelihood given 1 data point.
 theta = (1.0, )
