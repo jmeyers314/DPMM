@@ -13,7 +13,7 @@ def pick_discrete(p):
 
 
 class DPMM(object):
-    """Dirichlet Process Mixture Model.
+    """Dirichlet Process Mixture Model.  Using algorithm 1 from Neal (2000).
 
     @param conjugate_prior  The conjugate_prior object for whatever model is being inferred.
     @param alpha            Concentration parameter.
@@ -52,7 +52,73 @@ class DPMM(object):
         else:  # reuse an existing theta
             self.theta[i] = self.theta[picked]
 
-    def update_theta(self, n=1):
+    def update(self, n=1):
         for j in xrange(n):
             for i in xrange(len(self.D)):
                 self.update_1_theta(i)
+
+
+class DPMM2(object):
+    """Dirichlet Process Mixture Model.  Using algorithm 2 from Neal (2000).
+
+    @param conjugate_prior  The conjugate_prior object for whatever model is being inferred.
+    @param alpha            Concentration parameter.
+    @param D                Data.
+    @param phi              Optional initial state for sampler.
+    @param label            Optional initial class labels for sampler.
+    """
+    def __init__(self, conjugate_prior, alpha, D, phi=None, label=None):
+        self.conjugate_prior = conjugate_prior
+        self.alpha = alpha
+        self.D = D  # data
+        self.n = len(self.D)
+
+        if phi is None:
+            # Draw from the prior.  Use a list for this one, since the length will be changing.
+            phi = [self.conjugate_prior.sample() for i in xrange(self.n)]
+            nphi = [1]*self.n
+            # Give each sample it's own class label.
+            label = np.arange(self.n)
+
+        self.phi = phi
+        self.nphi = nphi
+        self.label = label
+
+        # Initialize r_i array again
+        self.r_i = self.alpha * np.array([conjugate_prior.pred(x) for x in D])
+
+    def draw_new_label(self, i):
+        p = [self.conjugate_prior.like1(phi, x=self.D[i])*nphi
+             for phi, nphi in zip(self.phi, self.nphi)]
+        p.append(self.r_i[i])
+        p = np.array(p)
+        p /= np.sum(p)
+        picked = pick_discrete(p)
+        return picked
+
+    def update_c(self):
+        for i in xrange(self.n):
+            label = self.label[i]
+            self.nphi[label] -= 1
+            if self.nphi[label] == 0:
+                del self.phi[label]
+                del self.nphi[label]
+                # Need to decrement labels for label beyond the one deleted...
+                self.label[np.nonzero(self.label >= label)] -= 1
+            new_label = self.draw_new_label(i)
+            self.label[i] = new_label
+            if new_label == len(self.phi):
+                self.phi.append(self.conjugate_prior.post(self.D[i]).sample())
+                self.nphi.append(1)
+            else:
+                self.nphi[new_label] += 1
+
+    def update_phi(self):
+        for i in xrange(len(self.phi)):
+            data = self.D[np.nonzero(self.label == i)]
+            self.phi[i] = self.conjugate_prior.post(data).sample()
+
+    def update(self, n=1):
+        for j in xrange(n):
+            self.update_c()
+            self.update_phi()
