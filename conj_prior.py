@@ -3,7 +3,6 @@
 
 from operator import mul
 import numpy as np
-from scipy.stats import norm, multivariate_normal, invwishart
 from scipy.special import gamma
 
 
@@ -100,6 +99,23 @@ class ConjugatePrior(object):
             return self.post(D).pred(x)
 
 
+def random_wish(dof, S, size=1):
+    dim = S.shape[0]
+    if size == 1:
+        x = np.random.multivariate_normal(np.zeros(dim), S, size=dof)
+        return np.dot(x.T, x)
+    else:
+        out = np.empty((size, dim, dim), dtype=np.float64)
+        for i in range(size):
+            x = np.random.multivariate_normal(np.zeros(dim), S, size=dof)
+            out[i] = np.dot(x.T, x)
+        return out
+
+
+def random_invwish(dof, invS, size=1):
+    return np.linalg.inv(random_wish(dof, invS, size=size))
+
+
 class NIW(ConjugatePrior):
     """Normal-Inverse-Wishart prior for multivariate Gaussian distribution.
 
@@ -132,21 +148,17 @@ class NIW(ConjugatePrior):
         """Return a sample {mu, Sigma} or list of samples [{mu_1, Sigma_1}, ...] from
         distribution.
         """
-        Sig = invwishart.rvs(df=self.nu_0, scale=np.linalg.inv(self.Lam_0), size=size)
+        Sig = random_invwish(dof=self.nu_0, invS=self.Lam_0, size=size)
         if size == 1:
-            return multivariate_normal.rvs(self.mu_0, Sig/self.kappa_0), Sig
+            return np.random.multivariate_normal(self.mu_0, Sig/self.kappa_0), Sig
         else:
-            return zip((multivariate_normal.rvs(self.mu_0, S/self.kappa_0) for S in Sig), Sig)
+            return zip((np.random.multivariate_normal(self.mu_0, Sig/self.kappa_0) for S in Sig),
+                       Sig)
 
-    def like1(self, mu, Sigma, x=None):
-        """Returns likelihood Pr(x | mu, Sigma), for a single data point.  Returns callable if D1
-        is None.
-        """
-        rv = multivariate_normal(mean=mu, cov=Sigma)
-        if x is None:
-            return rv.pdf
-        else:
-            return rv.pdf(x)
+    def like1(self, mu, Sigma, x):
+        """Returns likelihood Pr(x | mu, Sigma), for a single data point."""
+        norm = (2*np.pi*np.linalg.det(Sigma))**(0.5*self.d)
+        return np.exp(-0.5*vmv(x-mu, np.linalg.inv(Sigma))) / norm
 
     def __call__(self, mu, Sigma):
         """Returns Pr(mu, Sigma), i.e., the prior."""
@@ -190,6 +202,12 @@ class NIW(ConjugatePrior):
         num = gammad(self.d, self.nu_n/2.0) * detLam0**(self.nu_0/2.0)
         den = np.pi**(n*self.d/2.0) * gammad(self.d, self.nu_0/2.0) * detLamn**(self.nu_n/2.0)
         return num/den * (self.kappa_0/self.kappa_n)**(self.d/2.0)
+
+    def update_hyperparameters(self):
+        # Todo: update mu_0, usqr=Sigma, wsqr as in Kelly(2007).
+        # Long term: Figure out how to make this generic, for other parameterizations of
+        # hyperpriors!
+        pass
 
 
 class GaussianMeanKnownVariance(ConjugatePrior):
