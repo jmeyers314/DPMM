@@ -29,7 +29,7 @@ class DPMM(object):
 
         if theta is None:
             # Draw from the prior
-            theta = conjugate_prior.sample(size=len(D))
+            theta = [tuple(conjugate_prior.sample()) for i in range(self.n)]
         self.theta = theta
 
         # Initialize r_i array
@@ -37,7 +37,7 @@ class DPMM(object):
 
     def q(self, i):
         # compute and return row of q_ij matrix (we only ever need one row at a time).
-        qs = np.array([self.conjugate_prior.like1(th_j, x=self.D[i]) for th_j in self.theta])
+        qs = np.array([self.conjugate_prior.like1(*th_j, x=self.D[i]) for th_j in self.theta])
         qs[i] = self.r_i[i]  # cheat by placing r_i at q_ii.
         return qs
 
@@ -48,7 +48,7 @@ class DPMM(object):
         picked = pick_discrete(p)
         if picked == i:  # This corresponds to picking r_i in Neal (2000); i.e. get a new theta
             # Neal (2000) H_i is the posterior given a single observation x.
-            self.theta[i] = self.conjugate_prior.post(x).sample()
+            self.theta[i] = tuple(self.conjugate_prior.post(x).sample())
         else:  # reuse an existing theta
             self.theta[i] = self.theta[picked]
 
@@ -75,7 +75,7 @@ class DPMM2(object):
 
         if phi is None:
             # Draw from the prior.  Use a list for this one, since the length will be changing.
-            phi = [self.conjugate_prior.sample() for i in xrange(self.n)]
+            phi = [tuple(self.conjugate_prior.sample()) for i in xrange(self.n)]
             nphi = [1]*self.n
             # Give each sample it's own class label.
             label = np.arange(self.n)
@@ -88,7 +88,7 @@ class DPMM2(object):
         self.r_i = self.alpha * np.array([conjugate_prior.pred(x) for x in D])
 
     def draw_new_label(self, i):
-        p = [self.conjugate_prior.like1(phi, x=self.D[i])*nphi
+        p = [self.conjugate_prior.like1(*phi, x=self.D[i])*nphi
              for phi, nphi in zip(self.phi, self.nphi)]
         p.append(self.r_i[i])
         p = np.array(p)
@@ -108,7 +108,7 @@ class DPMM2(object):
             new_label = self.draw_new_label(i)
             self.label[i] = new_label
             if new_label == len(self.phi):
-                self.phi.append(self.conjugate_prior.post(self.D[i]).sample())
+                self.phi.append(tuple(self.conjugate_prior.post(self.D[i]).sample()))
                 self.nphi.append(1)
             else:
                 self.nphi[new_label] += 1
@@ -116,7 +116,7 @@ class DPMM2(object):
     def update_phi(self):
         for i in xrange(len(self.phi)):
             data = self.D[np.nonzero(self.label == i)]
-            self.phi[i] = self.conjugate_prior.post(data).sample()
+            self.phi[i] = tuple(self.conjugate_prior.post(data).sample())
 
     def update(self, n=1):
         for j in xrange(n):
