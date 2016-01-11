@@ -12,7 +12,7 @@ def gammad(d, nu_over_2):
     return np.pi**(d*(d-1.)/4)*np.multiply.reduce([gamma(0.5*(nu+1-i)) for i in range(d)])
 
 
-def vmv(vec, mat=None, vec2=None):
+def vTmv(vec, mat=None, vec2=None):
     """Multiply a vector times a matrix times a vector, with a transpose applied to the first
     vector.  This is so common, I functionized it.
 
@@ -202,12 +202,6 @@ class NIW(ConjugatePrior):
         num = gammad(self.d, self.nu_n/2.0) * detLam0**(self.nu_0/2.0)
         den = np.pi**(n*self.d/2.0) * gammad(self.d, self.nu_0/2.0) * detLamn**(self.nu_n/2.0)
         return num/den * (self.kappa_0/self.kappa_n)**(self.d/2.0)
-
-    def update_hyperparameters(self):
-        # Todo: update mu_0, usqr=Sigma, wsqr as in Kelly(2007).
-        # Long term: Figure out how to make this generic, for other parameterizations of
-        # hyperpriors!
-        pass
 
 
 class GaussianMeanKnownVariance(ConjugatePrior):
