@@ -38,20 +38,26 @@ def multivariate_t(d, nu, mu, Sig, x=None):
     coef /= gamma(nu/2.0) * nu**(d/2.0)*np.pi**(d/2.0)
 
     def f(x):
-        return coef * (1.0 + 1./nu*vmv((x-mu).T, invSig))**(-(nu+d)/2.0)
+        return coef * (1.0 + 1./nu*vTmv((x-mu).T, invSig))**(-(nu+d)/2.0)
     if x is None:
         return f
     else:
         return f(x)
 
 
-class ConjugatePrior(object):
+class Prior(object):
     """
     theta = parameters of the model.
     x = data point.
     D = {x} = all data.
     params = parameters of the prior.
     """
+    def __init__(self, post=None, *args, **kwargs):
+        # Assume conjugate prior by default, i.e. that posterior is same form as prior
+        if post is None:
+            post = type(self)
+        self._post = post
+
     def sample(self, size=None):
         """Return one or more samples from prior distribution."""
         raise NotImplementedError
@@ -85,7 +91,7 @@ class ConjugatePrior(object):
 
     def post(self, D):
         """Returns new ConjugatePrior with updated params for prior->posterior."""
-        return type(self)(*self.post_params(D))
+        return self._post(*self.post_params(D))
 
     def pred(self, x):
         """Prior predictive.  Pr(x | params)"""
@@ -116,7 +122,7 @@ def random_invwish(dof, invS, size=1):
     return np.linalg.inv(random_wish(dof, invS, size=size))
 
 
-class NIW(ConjugatePrior):
+class NIW(Prior):
     """Normal-Inverse-Wishart prior for multivariate Gaussian distribution.
 
     Model parameters
@@ -137,12 +143,13 @@ class NIW(ConjugatePrior):
         self.Lam_0 = Lam_0
         self.nu_0 = nu_0
         self.d = len(mu_0)
+        super(NIW, self).__init__()
 
     def _S(self, D):
         """Scatter matrix.  D is [NOBS, NDIM].  Returns [NDIM, NDIM] array."""
         # Eq (244)
         Dbar = np.mean(D, axis=0)
-        return vmv((D-Dbar))
+        return vTmv((D-Dbar))
 
     def sample(self, size=1):
         """Return a sample {mu, Sigma} or list of samples [{mu_1, Sigma_1}, ...] from
@@ -158,7 +165,7 @@ class NIW(ConjugatePrior):
     def like1(self, mu, Sigma, x):
         """Returns likelihood Pr(x | mu, Sigma), for a single data point."""
         norm = (2*np.pi*np.linalg.det(Sigma))**(0.5*self.d)
-        return np.exp(-0.5*vmv(x-mu, np.linalg.inv(Sigma))) / norm
+        return np.exp(-0.5*vTmv(x-mu, np.linalg.inv(Sigma))) / norm
 
     def __call__(self, mu, Sigma):
         """Returns Pr(mu, Sigma), i.e., the prior."""
@@ -169,7 +176,7 @@ class NIW(ConjugatePrior):
         invSig = np.linalg.inv(Sigma)
         # Eq (248)
         return 1./Z * detSig**(-(0.5*(self.nu_0+self.d)+1)) * np.exp(
-            -0.5*np.trace(np.dot(self.Lam_0, invSig) - self.kappa_0/2*vmv(mu-self.mu_0, invSig)))
+            -0.5*np.trace(np.dot(self.Lam_0, invSig) - self.kappa_0/2*vTmv(mu-self.mu_0, invSig)))
 
     def post_params(self, D):
         """Recall D is [NOBS, NDIM]."""
@@ -184,7 +191,7 @@ class NIW(ConjugatePrior):
         # Eq (254)
         Lam_n = (self.Lam_0 +
                  self._S(D) +
-                 self.kappa_0*n/(self.kappa_0+n)*vmv((Dbar-self.mu_0).T))
+                 self.kappa_0*n/(self.kappa_0+n)*vTmv((Dbar-self.mu_0).T))
         return mu_n, kappa_n, Lam_n, nu_n
 
     def pred(self, x):
@@ -204,7 +211,7 @@ class NIW(ConjugatePrior):
         return num/den * (self.kappa_0/self.kappa_n)**(self.d/2.0)
 
 
-class GaussianMeanKnownVariance(ConjugatePrior):
+class GaussianMeanKnownVariance(Prior):
     """Model univariate Gaussian with known variance and unknown mean.
 
     Model parameters
@@ -227,6 +234,7 @@ class GaussianMeanKnownVariance(ConjugatePrior):
         self.sig = sig
         self._norm1 = np.sqrt(2*np.pi*self.sig**2)
         self._norm2 = np.sqrt(2*np.pi*self.sig_0**2)
+        super(GaussianMeanKnownVariance, self).__init__()
 
     def sample(self, size=None):
         """Return a sample `mu` or samples [mu1, mu2, ...] from distribution."""
