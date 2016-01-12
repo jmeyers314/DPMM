@@ -86,7 +86,7 @@ class Prior(object):
         raise NotImplementedError
 
     def post(self, D):
-        """Returns new ConjugatePrior with updated params for prior->posterior."""
+        """Returns new Prior with updated params for prior->posterior."""
         return self._post(*self.post_params(D))
 
     def pred(self, x):
@@ -207,6 +207,66 @@ class NIW(Prior):
         return num/den * (self.kappa_0/self.kappa_n)**(self.d/2.0)
 
 
+class Kelly07(Prior):
+    """Normal-Inverse-Wishart prior for multivariate Gaussian distribution.
+
+    Model parameters
+    ----------------
+    mu :    multivariate mean
+    Sigma : covariance matrix
+
+    Prior parameters (I think)
+    ----------------
+    mu_0
+    W
+    p - dimensions of data: number of covariates.
+
+    """
+    def __init__(self, mu_0, W, p):
+        self.mu_0 = mu_0
+        self.W = W
+        self.p = p
+        self.U = W  # Probably a better way to initialize this...
+        # REQUIRED
+        # self._post = REQUIRED  or overwrite self.post_pred
+        super(Kelly07, self).__init__()
+
+    def _S(self, D):
+        """Scatter matrix.  D is [NOBS, NDIM].  Returns [NDIM, NDIM] array."""
+        # Eq (244)
+        Dbar = np.mean(D, axis=0)
+        return vTmv((D-Dbar))
+
+    def sample(self, size=1):
+        """Return a sample {mu, Sigma} or list of samples [{mu_1, Sigma_1}, ...] from
+        distribution.
+        """
+        mu = np.random.multivariate_normal(mean=self.mu_0, cov=self.U, size=size)
+        Sig = random_invwish(dof=self.p, invS=self.U, size=size)  # invS = np.linalg.inv(self.U)?
+        return zip(mu, Sig)
+
+    def like1(self, mu, Sigma, x):
+        """Returns likelihood Pr(x | mu, Sigma), for a single data point."""
+        norm = (2*np.pi*np.linalg.det(Sigma))**(0.5*self.d)
+        return np.exp(-0.5*vTmv(x-mu, np.linalg.inv(Sigma))) / norm
+
+    def __call__(self, mu, Sigma):
+        """Returns Pr(mu, Sigma), i.e., the prior."""
+        pass
+        # Not strictly required.
+
+    def post_params(self, D):
+        """Recall D is [NOBS, NDIM]."""
+        # required
+
+    def pred(self, x):
+        """Prior predictive.  Pr(x) = int Pr(x | mu, Sig) Pr(mu, Sig | mu_0, U)"""
+        # required
+
+    def marginal_likelihood(self, D):
+        """Return Pr(D) = \int Pr(D, theta) Pr(theta)"""
+
+
 class GaussianMeanKnownVariance(Prior):
     """Model univariate Gaussian with known variance and unknown mean.
 
@@ -280,3 +340,68 @@ class GaussianMeanKnownVariance(Prior):
         expnum += 2*n*Dbar*self.mu_0
         expden = 2*(n*self.sig_0**2+self.sig**2)
         return num/den*np.exp(exponent+expnum/expden)
+
+
+class GaussianMeanVar(Prior):
+    """Model univariate Gaussian with params for mean and variance.
+
+    Model parameters
+    ----------------
+    mu :    mean
+    var :   variance
+
+    Prior parameters
+    ----------------
+    mu_0 :  prior mean
+    kappa_0 : belief in mu_0
+    sigsqr_0 : prior variance
+    nu_0 : belief in sigsqr_0
+    """
+    def __init__(self, mu_0, kappa_0, sigsqr_0, nu_0):
+        self.mu_0 = mu_0
+        self.kappa_0 = kappa_0
+        self.sigsqr_0 = sigsqr_0
+        self.nu_0 = nu_0
+
+    def sample(self, size=1):
+        var = np.random.invchi(dof=self.nu_0, scale=self.sigsqr_0, size=size)  # sanity check this.
+        if size == 1:
+            return np.random.normal(self.mu_0, var/self.kappa_0), var
+        else:
+            return zip((np.random.normal(self.mu_0, v/self.kappa_0) for v in var), var)
+
+    def like1(self, mu, var, x):
+        """Returns likelihood Pr(x | mu, var), for a single data point."""
+        return np.exp(-0.5*(x-mu)/var) / np.sqrt(2*np.pi*var)
+
+    def __call__(self, mu, var):
+        """Returns Pr(mu, var), i.e., the prior density."""
+        Z = (np.sqrt(2*np.pi/self.kappa_0) *
+             gamma(self.nu_0/2.) *
+             (2./(self.nu_0*self.sigsqr_0))**(self.nu_0/2.))
+        Q = self.nu_0*self.sigsqr_0+self.kappa_0*(self.mu_0-mu)**2
+        return var**(self.nu_0/2+1)*np.exp(-0.5*Q/var) / Z
+
+    def post_params(self, D):
+        n = len(D)
+        Dbar = np.mean(D)
+        kappa_n = self.kappa_0 + n
+        mu_n = (self.kappa_0*self.mu_0 + n*Dbar)/kappa_n
+        nu_n = self.nu_0 + n
+        sigsqr_n = ((self.nu_0*self.sigsqr_0 + n*np.var(D) +
+                    n*self.kappa_0/(self.kappa_0+n)*(self.mu_0-Dbar)**2)/nu_n)
+        return mu_n, kappa_n, sigsqr_n, nu_n
+
+    def pred(self, x):
+        """Prior predictive.  Pr(x)"""
+        nu = self.nu_0
+        kappa = self.kappa_0
+        nup1 = nu+1
+        kp1 = kappa+1
+        return (gamma(nup1/2.0) / gamma(nu/2.0) *
+                (kappa/(kp1*np.pi*nu*self.sigsqr_0))**0.5 *
+                (1.0+kappa*(x-self.mu_0)**2/(kp1*nu*self.sigsqr_0))**(-nup1/2.0))
+
+    def marginal_likelihood(self, D):
+        """Fully marginalized likelihood Pr(D)"""
+        pass
