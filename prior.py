@@ -68,18 +68,14 @@ class Prior(object):
 
     def likelihood(self, *args, **kwargs):
         # It's quite likely overriding this will yield faster results...
-        """Returns Pr(D | theta).  If D is None, then returns a callable."""
+        """Returns Pr(D | theta)."""
 
-        D = kwargs.pop('D', None)
+        try:
+            D = kwargs.pop('D')
+        except KeyError:
+            raise ValueError("Likelihood called without data.")
 
-        def l(Ds):
-            like1 = self.like1(*args, **kwargs)
-            return reduce(mul, (like1(D1) for D1 in Ds), 1.0)
-
-        if D is None:
-            return l
-        else:
-            return l(D)
+        return reduce(mul, (self.like1(*args, x=x, **kwargs) for x in D), 1.0)
 
     def __call__(self, *args):
         """Returns Pr(theta), i.e. the prior probability."""
@@ -159,7 +155,7 @@ class NIW(Prior):
         if size == 1:
             return np.random.multivariate_normal(self.mu_0, Sig/self.kappa_0), Sig
         else:
-            return zip((np.random.multivariate_normal(self.mu_0, Sig/self.kappa_0) for S in Sig),
+            return zip((np.random.multivariate_normal(self.mu_0, S/self.kappa_0) for S in Sig),
                        Sig)
 
     def like1(self, mu, Sigma, x):
@@ -238,7 +234,10 @@ class GaussianMeanKnownVariance(Prior):
 
     def sample(self, size=None):
         """Return a sample `mu` or samples [mu1, mu2, ...] from distribution."""
-        return np.random.normal(self.mu_0, self.sig_0, size=size)
+        if size is None:
+            return (np.random.normal(self.mu_0, self.sig_0),)
+        else:
+            return np.random.normal(self.mu_0, self.sig_0, size=size)
 
     def like1(self, mu, x):
         """Returns likelihood Pr(x | mu), for a single data point.
