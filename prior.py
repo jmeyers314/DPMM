@@ -6,15 +6,8 @@ import numpy as np
 from scipy.special import gamma
 
 
-def gammad(d, nu_over_2):
-    """D-dimensional gamma function."""
-    nu = 2.0 * nu_over_2
-    return np.pi**(d*(d-1.)/4)*np.multiply.reduce([gamma(0.5*(nu+1-i)) for i in range(d)])
-
-
 def vTmv(vec, mat=None, vec2=None):
-    """Multiply a vector times a matrix times a vector, with a transpose applied to the first
-    vector.  This is so common, I functionized it.
+    """Multiply a vector transpose times a matrix times a vector.
 
     @param vec  The first vector (will be transposed).
     @param mat  The matrix in the middle.  Identity by default.
@@ -27,6 +20,12 @@ def vTmv(vec, mat=None, vec2=None):
     if vec2 is None:
         vec2 = vec
     return np.dot(vec.T, np.dot(mat, vec2))
+
+
+def gammad(d, nu_over_2):
+    """D-dimensional gamma function."""
+    nu = 2.0 * nu_over_2
+    return np.pi**(d*(d-1.)/4)*np.multiply.reduce([gamma(0.5*(nu+1-i)) for i in range(d)])
 
 
 def multivariate_t(d, nu, mu, Sig, x=None):
@@ -43,6 +42,39 @@ def multivariate_t(d, nu, mu, Sig, x=None):
         return f
     else:
         return f(x)
+
+
+def t_density(nu, mu, sigsqr, x):
+    c = gamma((nu+1.)/2.)/gamma(nu/2.)/np.sqrt(nu*np.pi*sigsqr)
+    return c*(1.0+1./nu*((x-mu)**2/sigsqr))**(-(1.+nu)/2.0)
+
+
+def scaled_IX_density(nu, sigsqr, x):
+    return (1.0/gamma(nu/2.0) *
+            (nu*sigsqr/2.0)**(nu/2.0) *
+            x**(-nu/2.0-1.0) *
+            np.exp(-nu*sigsqr/(2.0*x)))
+
+
+def normal_density(mu, var, x):
+    return np.exp(-0.5*(x-mu)**2/var)/np.sqrt(2*np.pi*var)
+
+
+def random_wish(dof, S, size=1):
+    dim = S.shape[0]
+    if size == 1:
+        x = np.random.multivariate_normal(np.zeros(dim), S, size=dof)
+        return np.dot(x.T, x)
+    else:
+        out = np.empty((size, dim, dim), dtype=np.float64)
+        for i in range(size):
+            x = np.random.multivariate_normal(np.zeros(dim), S, size=dof)
+            out[i] = np.dot(x.T, x)
+        return out
+
+
+def random_invwish(dof, invS, size=1):
+    return np.linalg.inv(random_wish(dof, invS, size=size))
 
 
 class Prior(object):
@@ -99,23 +131,6 @@ class Prior(object):
             return self.post(D).pred
         else:
             return self.post(D).pred(x)
-
-
-def random_wish(dof, S, size=1):
-    dim = S.shape[0]
-    if size == 1:
-        x = np.random.multivariate_normal(np.zeros(dim), S, size=dof)
-        return np.dot(x.T, x)
-    else:
-        out = np.empty((size, dim, dim), dtype=np.float64)
-        for i in range(size):
-            x = np.random.multivariate_normal(np.zeros(dim), S, size=dof)
-            out[i] = np.dot(x.T, x)
-        return out
-
-
-def random_invwish(dof, invS, size=1):
-    return np.linalg.inv(random_wish(dof, invS, size=size))
 
 
 class NIW(Prior):
@@ -195,8 +210,8 @@ class NIW(Prior):
         return multivariate_t(self.d, self.nu_0-self.d+1, self.mu_0,
                               self.Lam_0*(self.kappa_0+1)/(self.kappa_0 - self.d + 1), x)
 
-    def marginal_likelihood(self, D):
-        """Return Pr(D) = \int Pr(D, theta) Pr(theta)"""
+    def evidence(self, D):
+        """Return Pr(D) = \int Pr(D | theta) Pr(theta)"""
         # Eq (266)
         n = len(D)
         mu_n, kappa_n, Lam_n, nu_n = self.post_params(D)
@@ -205,66 +220,6 @@ class NIW(Prior):
         num = gammad(self.d, self.nu_n/2.0) * detLam0**(self.nu_0/2.0)
         den = np.pi**(n*self.d/2.0) * gammad(self.d, self.nu_0/2.0) * detLamn**(self.nu_n/2.0)
         return num/den * (self.kappa_0/self.kappa_n)**(self.d/2.0)
-
-
-class Kelly07(Prior):
-    """Normal-Inverse-Wishart prior for multivariate Gaussian distribution.
-
-    Model parameters
-    ----------------
-    mu :    multivariate mean
-    Sigma : covariance matrix
-
-    Prior parameters (I think)
-    ----------------
-    mu_0
-    W
-    p - dimensions of data: number of covariates.
-
-    """
-    def __init__(self, mu_0, W, p):
-        self.mu_0 = mu_0
-        self.W = W
-        self.p = p
-        self.U = W  # Probably a better way to initialize this...
-        # REQUIRED
-        # self._post = REQUIRED  or overwrite self.post_pred
-        super(Kelly07, self).__init__()
-
-    def _S(self, D):
-        """Scatter matrix.  D is [NOBS, NDIM].  Returns [NDIM, NDIM] array."""
-        # Eq (244)
-        Dbar = np.mean(D, axis=0)
-        return vTmv((D-Dbar))
-
-    def sample(self, size=1):
-        """Return a sample {mu, Sigma} or list of samples [{mu_1, Sigma_1}, ...] from
-        distribution.
-        """
-        mu = np.random.multivariate_normal(mean=self.mu_0, cov=self.U, size=size)
-        Sig = random_invwish(dof=self.p, invS=self.U, size=size)  # invS = np.linalg.inv(self.U)?
-        return zip(mu, Sig)
-
-    def like1(self, mu, Sigma, x):
-        """Returns likelihood Pr(x | mu, Sigma), for a single data point."""
-        norm = (2*np.pi*np.linalg.det(Sigma))**(0.5*self.d)
-        return np.exp(-0.5*vTmv(x-mu, np.linalg.inv(Sigma))) / norm
-
-    def __call__(self, mu, Sigma):
-        """Returns Pr(mu, Sigma), i.e., the prior."""
-        pass
-        # Not strictly required.
-
-    def post_params(self, D):
-        """Recall D is [NOBS, NDIM]."""
-        # required
-
-    def pred(self, x):
-        """Prior predictive.  Pr(x) = int Pr(x | mu, Sig) Pr(mu, Sig | mu_0, U)"""
-        # required
-
-    def marginal_likelihood(self, D):
-        """Return Pr(D) = \int Pr(D, theta) Pr(theta)"""
 
 
 class GaussianMeanKnownVariance(Prior):
@@ -306,8 +261,6 @@ class GaussianMeanKnownVariance(Prior):
 
     def __call__(self, mu):
         """Returns Pr(mu), i.e., the prior."""
-        # Slow
-        # return norm(loc=self.mu_0, scale=self.sig_0).pdf(mu)
         return np.exp(-0.5*(mu-self.mu_0)**2/self.sig_0**2) / self._norm2
 
     def post_params(self, D):
@@ -324,12 +277,10 @@ class GaussianMeanKnownVariance(Prior):
 
     def pred(self, x):
         """Prior predictive.  Pr(x)"""
-        # Again, would like to do the following, but it's slow.
-        # return norm(loc=self.mu_0, scale=np.sqrt(self.sig**2+self.sig_0**2)).pdf(x)
         sig = self.sig**2 + self.sig_0**2
         return np.exp(-0.5*(x-self.mu_0)**2/sig**2) / (np.sqrt(2*np.pi)*sig)
 
-    def marginal_likelihood(self, D):
+    def evidence(self, D):
         """Fully marginalized likelihood Pr(D)"""
         n = len(D)
         Dbar = np.sum(D)
@@ -342,8 +293,8 @@ class GaussianMeanKnownVariance(Prior):
         return num/den*np.exp(exponent+expnum/expden)
 
 
-class GaussianMeanVar(Prior):
-    """Model univariate Gaussian with params for mean and variance.
+class NIX(Prior):
+    """Normal-Inverse-Chi-Square model for univariate Gaussian with params for mean and variance.
 
     Model parameters
     ----------------
@@ -358,13 +309,14 @@ class GaussianMeanVar(Prior):
     nu_0 : belief in sigsqr_0
     """
     def __init__(self, mu_0, kappa_0, sigsqr_0, nu_0):
-        self.mu_0 = mu_0
-        self.kappa_0 = kappa_0
-        self.sigsqr_0 = sigsqr_0
-        self.nu_0 = nu_0
+        self.mu_0 = float(mu_0)
+        self.kappa_0 = float(kappa_0)
+        self.sigsqr_0 = float(sigsqr_0)
+        self.nu_0 = float(nu_0)
+        super(NIX, self).__init__()
 
     def sample(self, size=1):
-        var = np.random.invchi(dof=self.nu_0, scale=self.sigsqr_0, size=size)  # sanity check this.
+        var = 1./np.random.chisquare(df=self.nu_0, size=size)*self.sigsqr_0  # sanity check this.
         if size == 1:
             return np.random.normal(self.mu_0, var/self.kappa_0), var
         else:
@@ -372,36 +324,107 @@ class GaussianMeanVar(Prior):
 
     def like1(self, mu, var, x):
         """Returns likelihood Pr(x | mu, var), for a single data point."""
-        return np.exp(-0.5*(x-mu)/var) / np.sqrt(2*np.pi*var)
+        return np.exp(-0.5*(x-mu)**2/var) / np.sqrt(2*np.pi*var)
 
     def __call__(self, mu, var):
         """Returns Pr(mu, var), i.e., the prior density."""
-        Z = (np.sqrt(2*np.pi/self.kappa_0) *
-             gamma(self.nu_0/2.) *
-             (2./(self.nu_0*self.sigsqr_0))**(self.nu_0/2.))
-        Q = self.nu_0*self.sigsqr_0+self.kappa_0*(self.mu_0-mu)**2
-        return var**(self.nu_0/2+1)*np.exp(-0.5*Q/var) / Z
+        return (normal_density(self.mu_0, var/self.kappa_0, mu) *
+                scaled_IX_density(self.nu_0, self.sigsqr_0, var))
 
     def post_params(self, D):
-        n = len(D)
+        try:
+            n = len(D)
+        except TypeError:
+            n = 1
         Dbar = np.mean(D)
         kappa_n = self.kappa_0 + n
         mu_n = (self.kappa_0*self.mu_0 + n*Dbar)/kappa_n
         nu_n = self.nu_0 + n
-        sigsqr_n = ((self.nu_0*self.sigsqr_0 + n*np.var(D) +
+        sigsqr_n = ((self.nu_0*self.sigsqr_0 + np.sum((D-Dbar)**2) +
                     n*self.kappa_0/(self.kappa_0+n)*(self.mu_0-Dbar)**2)/nu_n)
         return mu_n, kappa_n, sigsqr_n, nu_n
 
     def pred(self, x):
         """Prior predictive.  Pr(x)"""
-        nu = self.nu_0
-        kappa = self.kappa_0
-        nup1 = nu+1
-        kp1 = kappa+1
-        return (gamma(nup1/2.0) / gamma(nu/2.0) *
-                (kappa/(kp1*np.pi*nu*self.sigsqr_0))**0.5 *
-                (1.0+kappa*(x-self.mu_0)**2/(kp1*nu*self.sigsqr_0))**(-nup1/2.0))
+        return t_density(self.nu_0, self.mu_0, (1.+self.kappa_0)*self.sigsqr_0/self.kappa_0, x)
 
-    def marginal_likelihood(self, D):
+    def evidence(self, D):
         """Fully marginalized likelihood Pr(D)"""
-        pass
+        mu_n, kappa_n, sigsqr_n, nu_n = self.post_params(D)
+        try:
+            n = len(D)
+        except:
+            n = 1
+        return (gamma(nu_n/2.0)/gamma(self.nu_0/2.0) * np.sqrt(self.kappa_0/kappa_n) *
+                (self.nu_0*self.sigsqr_0)**(self.nu_0/2.0) /
+                (nu_n*sigsqr_n)**(nu_n/2.0) /
+                np.pi**(n/2.0))
+
+
+class NIG(Prior):
+    """Normal-Inverse-Gamma prior for univariate Gaussian with params for mean and variance.
+
+    Model parameters
+    ----------------
+    mu :    mean
+    var :   variance
+
+    Prior parameters
+    ----------------
+    mu_0 :  prior mean
+    V_0
+    a_0, b_0 : gamma parameters
+    """
+    def __init__(self, m_0, V_0, a_0, b_0):
+        self.m_0 = float(m_0)
+        self.V_0 = float(V_0)
+        self.a_0 = float(a_0)
+        self.b_0 = float(b_0)
+        super(NIG, self).__init__()
+
+    def sample(self, size=1):
+        var = 1./np.random.gamma(self.a_0, self.b_0, size=size)
+        if size == 1:
+            return np.random.normal(self.m_0, self.V_0*np.sqrt(var)), var
+        else:
+            return zip(np.random.normal(self.m_0, self.V_0*np.sqrt(var), size=size), var)
+
+    def like1(self, mu, var, x):
+        """Returns likelihood Pr(x | mu, var), for a single data point."""
+        return np.exp(-0.5*(x-mu)**2/var) / np.sqrt(2*np.pi*var)
+
+    def __call__(self, mu, var):
+        """Returns Pr(mu, var), i.e., the prior density."""
+        normal = np.exp(-0.5*(self.m_0-mu)**2/(var*self.V_0))/np.sqrt(2*np.pi*var*self.V_0)
+        ig = self.b_0**self.a_0/gamma(self.a_0)*var**(-(self.a_0+1))*np.exp(-self.b_0/var)
+        return normal*ig
+
+    def post_params(self, D):
+        try:
+            n = len(D)
+        except TypeError:
+            n = 1
+        Dbar = np.mean(D)
+        invV_0 = 1./self.V_0
+        V_n = 1./(invV_0 + n)
+        m_n = V_n*(invV_0*self.m_0 + n*Dbar)
+        a_n = self.a_0 + n/2.0
+        # The commented line below is from Murphy.  It doesn't pass the unit tests so I derived my
+        # own formula which does.
+        # b_n = self.b_0 + 0.5*(self.m_0**2*invV_0 + np.sum(Dbar**2) - m_n**2/V_n)
+        b_n = self.b_0 + 0.5*(np.sum((D-Dbar)**2)+n/(1.0+n*self.V_0)*(self.m_0-Dbar)**2)
+        return m_n, V_n, a_n, b_n
+
+    def pred(self, x):
+        """Prior predictive.  Pr(x)"""
+        return t_density(2.0*self.a_0, self.m_0, self.b_0*(1.0+self.V_0)/self.a_0, x)
+
+    def evidence(self, D):
+        """Fully marginalized likelihood Pr(D)"""
+        m_n, V_n, a_n, b_n = self.post_params(D)
+        try:
+            n = len(D)
+        except:
+            n = 1
+        return (np.sqrt(np.abs(V_n/self.V_0)) * (self.b_0**self.a_0)/(b_n**a_n) *
+                gamma(a_n)/gamma(self.a_0) / (np.pi**(n/2.0)*2.0**(n/2.0)))
