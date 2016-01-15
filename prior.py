@@ -445,3 +445,40 @@ class NIG(Prior):
             n = 1
         return (np.sqrt(np.abs(V_n/self.V_0)) * (self.b_0**self.a_0)/(b_n**a_n) *
                 gamma(a_n)/gamma(self.a_0) / (np.pi**(n/2.0)*2.0**(n/2.0)))
+
+
+class InvGamma(Prior):
+    def __init__(self, alpha, beta, mu):
+        self.alpha = alpha
+        self.beta = beta
+        self.mu = mu
+        super(InvGamma, self).__init__()
+
+    def sample(self, size=1):
+        return 1./np.random.gamma(self.alpha, self.beta, size=size)
+
+    def like1(self, var, x):
+        """Returns likelihood Pr(x | var), for a single data point."""
+        return np.exp(-0.5*(x-self.mu)**2/var) / np.sqrt(2*np.pi*var)
+
+    def __call__(self, var):
+        """Returns Pr(var), i.e., the prior density."""
+        a, b = self.alpha, self.beta
+        return b**a/gamma(a)*var**(-1.-a)*np.exp(-b/var)
+
+    def post_params(self, D):
+        try:
+            n = len(D)
+        except TypeError:
+            n = 1
+        a_n = self.alpha + n/2.0
+        b_n = self.beta + 0.5*np.sum((np.array(D)-self.mu)**2)
+        return a_n, b_n, self.mu
+
+    def pred(self, x):
+        """Prior predictive.  Pr(x)"""
+        return t_density(2*self.alpha, self.mu, self.beta/self.alpha, x)
+
+    def evidence(self, D):
+        """Fully marginalized likelihood Pr(D)"""
+        raise NotImplementedError

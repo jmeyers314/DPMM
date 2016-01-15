@@ -172,7 +172,7 @@ def test_NIX_eq_NIG():
 
 
 @timer
-def test_NIX_integrate():
+def test_NIX():
     import warnings
     mu_0 = -0.1
     sigsqr_0 = 1.1
@@ -230,7 +230,7 @@ def test_NIX_integrate():
 
 
 @timer
-def test_NIG_integrate():
+def test_NIG():
     import warnings
     m_0 = -0.1
     V_0 = 1.1
@@ -295,6 +295,51 @@ def test_scaled_IX_density():
     np.testing.assert_almost_equal(r[0], 1.0, 10, "scaled_IX_density does not integrate to 1.0")
 
 
+@timer
+def test_InvGamma():
+    alpha = 1.0
+    beta = 1.0
+    mu = 0.0
+    ig = prior.InvGamma(alpha, beta, mu)
+    ig.sample()
+
+    # Check prior density
+    r = quad(ig, 0.0, np.inf)
+    np.testing.assert_almost_equal(r[0], 1.0, 5, "InvGamma prior density does not integrate to 1.0")
+
+    # Check prior predictive density
+    r = quad(ig.pred, -np.inf, np.inf)
+    np.testing.assert_almost_equal(r[0], 1.0, 10,
+                                   "InvGamma prior predictive density does not integrate to 1.0")
+
+    # Check posterior density
+    D = [1.0, 2.0, 3.0]
+    r = quad(ig.post(D), 0.0, np.inf)
+    np.testing.assert_almost_equal(r[0], 1.0, 7,
+                                   "InvGamma posterior density does not integrate to 1.0")
+
+    # Check posterior predictive density
+    r = quad(ig.post(D).pred, -np.inf, np.inf)
+    np.testing.assert_almost_equal(
+        r[0], 1.0, 10, "InvGamma posterior predictive density does not integrate to 1.0")
+
+    # Check that the likelihood integrates to 1.
+    r = quad(lambda x: ig.like1(var=2.1, x=x), -np.inf, np.inf)
+    np.testing.assert_almost_equal(r[0], 1.0, 10,
+                                   "InvGamma likelihood does not integrate to 1.0")
+
+    # Check that posterior is proportional to prior * likelihood
+    # Add some more data points
+    D = np.array([1.0, 2.0, 3.0, 2.2, 2.3, 1.2])
+    vars_ = [0.7, 1.1, 1.2, 1.5]
+    posts = [ig.post(D)(var) for var in vars_]
+    posts2 = [ig(var)*ig.likelihood(var, D=D) for var in vars_]
+
+    np.testing.assert_array_almost_equal(
+        posts/posts[0], posts2/posts2[0], 5,
+        "InvGamma posterior not proportional to prior * likelihood.")
+
+
 if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
@@ -304,6 +349,7 @@ if __name__ == "__main__":
     test_NIW(args.full)
     test_GaussianMeanKnownVariance()
     test_NIX_eq_NIG()
-    test_NIX_integrate()
-    test_NIG_integrate()
+    test_NIX()
+    test_NIG()
     test_scaled_IX_density()
+    test_InvGamma()
