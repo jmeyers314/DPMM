@@ -15,6 +15,8 @@ def vTmv(vec, mat=None, vec2=None):
     @returns    Product.  Could be a scalar or a matrix depending on whether vec is a row or column
                 vector.
     """
+    if len(vec.shape) == 1:
+        vec = np.reshape(vec, [vec.shape[0], 1])
     if mat is None:
         mat = np.eye(len(vec))
     if vec2 is None:
@@ -149,9 +151,9 @@ class NIW(Prior):
     nu_0
     """
     def __init__(self, mu_0, kappa_0, Lam_0, nu_0):
-        self.mu_0 = mu_0
-        self.kappa_0 = kappa_0
-        self.Lam_0 = Lam_0
+        self.mu_0 = np.array(mu_0, dtype=float)
+        self.kappa_0 = float(kappa_0)
+        self.Lam_0 = np.array(Lam_0, dtype=float)
         self.nu_0 = nu_0
         self.d = len(mu_0)
         super(NIW, self).__init__()
@@ -160,7 +162,7 @@ class NIW(Prior):
         """Scatter matrix.  D is [NOBS, NDIM].  Returns [NDIM, NDIM] array."""
         # Eq (244)
         Dbar = np.mean(D, axis=0)
-        return vTmv((D-Dbar))
+        return vTmv(D-Dbar)
 
     def sample(self, size=1):
         """Return a sample {mu, Sigma} or list of samples [{mu_1, Sigma_1}, ...] from
@@ -175,24 +177,31 @@ class NIW(Prior):
 
     def like1(self, mu, Sigma, x):
         """Returns likelihood Pr(x | mu, Sigma), for a single data point."""
-        norm = (2*np.pi*np.linalg.det(Sigma))**(0.5*self.d)
+        norm = np.sqrt((2*np.pi)**self.d * np.linalg.det(Sigma))
         return np.exp(-0.5*vTmv(x-mu, np.linalg.inv(Sigma))) / norm
 
     def __call__(self, mu, Sigma):
         """Returns Pr(mu, Sigma), i.e., the prior."""
+        nu_0, d = self.nu_0, self.d
         # Eq (249)
-        Z = (2**(0.5*self.nu_0*self.d) * gammad(self.d, 0.5*self.nu_0) *
-             (2*np.pi/self.kappa_0)**(self.d/2) / np.linalg.det(self.Lam_0)**(0.5*self.nu_0))
+        Z = (2.0**(nu_0*d/2.0) * gammad(d, nu_0/2.0) *
+             (2.0*np.pi/self.kappa_0)**(d/2.0) / np.linalg.det(self.Lam_0)**(nu_0/2.0))
         detSig = np.linalg.det(Sigma)
         invSig = np.linalg.inv(Sigma)
         # Eq (248)
-        return 1./Z * detSig**(-(0.5*(self.nu_0+self.d)+1)) * np.exp(
-            -0.5*np.trace(np.dot(self.Lam_0, invSig) - self.kappa_0/2*vTmv(mu-self.mu_0, invSig)))
+        return 1./Z * detSig**(-((nu_0+d)/2.0+1.0)) * np.exp(
+            -0.5*np.trace(np.dot(self.Lam_0, invSig)) -
+            self.kappa_0/2.0*vTmv(mu-self.mu_0, invSig))
 
     def post_params(self, D):
         """Recall D is [NOBS, NDIM]."""
-        Dbar = np.mean(D, axis=0)
-        n = len(D)
+        shape = D.shape
+        if len(shape) == 2:
+            n, d = shape
+            Dbar = np.mean(D, axis=0)
+        elif len(shape) == 1:
+            n, d = 1, shape[0]
+            Dbar = np.mean(D)
         # Eq (252)
         kappa_n = self.kappa_0 + n
         # Eq (253)
@@ -200,9 +209,10 @@ class NIW(Prior):
         # Eq (251) (note typo in original, mu+0 -> mu_0)
         mu_n = (self.kappa_0 * self.mu_0 + n * Dbar) / kappa_n
         # Eq (254)
+        x = (Dbar-self.mu_0)[:, np.newaxis]
         Lam_n = (self.Lam_0 +
                  self._S(D) +
-                 self.kappa_0*n/(self.kappa_0+n)*vTmv((Dbar-self.mu_0).T))
+                 self.kappa_0*n/kappa_n*vTmv(x.T))
         return mu_n, kappa_n, Lam_n, nu_n
 
     def pred(self, x):
@@ -212,14 +222,21 @@ class NIW(Prior):
 
     def evidence(self, D):
         """Return Pr(D) = \int Pr(D | theta) Pr(theta)"""
+        shape = D.shape
+        if len(shape) == 2:
+            n, d = shape
+            Dbar = np.mean(D, axis=0)
+        elif len(shape) == 1:
+            n, d = 1, shape[0]
+            Dbar = np.mean(D)
+        assert d == self.d
         # Eq (266)
-        n = len(D)
         mu_n, kappa_n, Lam_n, nu_n = self.post_params(D)
         detLam0 = np.linalg.det(self.Lam_0)
         detLamn = np.linalg.det(Lam_n)
-        num = gammad(self.d, self.nu_n/2.0) * detLam0**(self.nu_0/2.0)
-        den = np.pi**(n*self.d/2.0) * gammad(self.d, self.nu_0/2.0) * detLamn**(self.nu_n/2.0)
-        return num/den * (self.kappa_0/self.kappa_n)**(self.d/2.0)
+        num = gammad(d, nu_n/2.0) * detLam0**(self.nu_0/2.0)
+        den = np.pi**(n*d/2.0) * gammad(d, self.nu_0/2.0) * detLamn**(nu_n/2.0)
+        return num/den * (self.kappa_0/kappa_n)**(d/2.0)
 
 
 class GaussianMeanKnownVariance(Prior):

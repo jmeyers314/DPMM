@@ -1,13 +1,27 @@
 import numpy as np
-from scipy.integrate import quad, dblquad
+from scipy.integrate import quad, dblquad, tplquad
 
 import prior
 
 
-def test_NIW():
-    mu_0 = np.r_[0.0, 0.0]
-    kappa_0 = 2
-    Lam_0 = np.eye(2)
+def timer(f):
+    def f2(*args, **kwargs):
+        import time
+        import inspect
+        t0 = time.time()
+        result = f(*args, **kwargs)
+        t1 = time.time()
+        fname = inspect.stack()[1][4][0].split('(')[0].strip()
+        print 'time for %s = %.2f' % (fname, t1-t0)
+        return result
+    return f2
+
+
+@timer
+def test_NIW(full=False):
+    mu_0 = np.r_[0.2, 0.1]
+    kappa_0 = 2.0
+    Lam_0 = np.eye(2)+0.1
     nu_0 = 2
 
     # Create a Normal-Inverse-Wishart prior.
@@ -17,21 +31,66 @@ def test_NIW():
     niw.sample()
     niw.sample(size=10)
 
-    # Check that we can evaluate a likelihood given 1 data point.
+    # Check that we can evaluate a likelihood given data.
     theta = (np.r_[1., 1.], np.eye(2)+0.12)
-    x = np.r_[0.1, 0.2]
-    niw.like1(*theta, x=x)
-    # Or given multiple data points.
     D = np.array([[0.1, 0.2], [0.2, 0.3], [0.1, 0.2], [0.4, 0.3]])
-    print niw.likelihood(*theta, D=D)
+    niw.likelihood(*theta, D=D)
 
     # Evaluate prior
-    print niw(*theta)
-    print niw.post_params(D)
-    print niw.pred(x)
-    print niw.post_pred(D, x)
+    niw(*theta)
+    niw.post_params(D)
+
+    # Check prior predictive density
+    r = dblquad(lambda x, y: niw.pred([x, y]), -np.inf, np.inf, lambda x: -np.inf, lambda x: np.inf)
+    np.testing.assert_almost_equal(r[0], 1.0, 8,
+                                   "NIW prior predictive density does not integrate to 1.0")
+
+    # Check posterior predictive density
+    r = dblquad(lambda x, y: niw.post(D).pred([x, y]), -np.inf, np.inf,
+                lambda x: -np.inf, lambda x: np.inf)
+    np.testing.assert_almost_equal(r[0], 1.0, 8,
+                                   "NIW posterior predictive density does not integrate to 1.0")
+
+    # Check that the likelihood of a single point in 2 dimensions integrates to 1.
+    r = dblquad(lambda x, y: niw.like1(mu=np.r_[1.2, 1.1], Sigma=np.eye(2)+0.12, x=[x, y]),
+                -np.inf, np.inf, lambda x: -np.inf, lambda x: np.inf)
+    np.testing.assert_almost_equal(r[0], 1.0, 10,
+                                   "NIW likelihood does not integrate to 1.0")
+
+    if __name__ == "__main__" and full:
+        # Check that likelihood of a single point in 3 dimensions integrates to 1.
+        niw3 = prior.NIW([1]*3, 2.0, np.eye(3), 3)
+        r = tplquad(lambda x, y, z: niw3.like1(np.r_[0.1, 0.2, 0.3], np.eye(3)+0.1, [x, y, z]),
+                    -np.inf, np.inf,
+                    lambda x: -np.inf, lambda x: np.inf,
+                    lambda x, y: -np.inf, lambda x, y: np.inf)
+        np.testing.assert_almost_equal(r[0], 1.0, 8,
+                                       "NIW likelihood does not integrate to 1.0")
+
+    # Check that posterior is proportional to prior * likelihood
+    # Add some more data points
+    D = np.array([[0.1, 0.2], [0.2, 0.3], [0.1, 0.2], [0.4, 0.3],
+                  [2.2, 1.1], [2.3, 1.1], [2.5, 2.3]])
+    mus = [np.r_[2.1, 1.1], np.r_[0.9, 1.2], np.r_[0.9, 1.1]]
+    Sigmas = [np.eye(2)*1.5, np.eye(2)*0.7, np.array([[1.1, -0.1], [-0.1, 1.2]])]
+    posts = [niw.post(D)(mu, Sigma) for mu, Sigma in zip(mus, Sigmas)]
+    posts2 = [niw(mu, Sigma)*niw.likelihood(mu, Sigma, D=D) for mu, Sigma, in zip(mus, Sigmas)]
+
+    np.testing.assert_array_almost_equal(posts/posts[0], posts2/posts2[0], 5,
+                                         "NIW posterior not proportional to prior * likelihood.")
+
+    # Check that posterior = prior * likelihood / evidence
+    mus = [np.r_[1.1, 1.1], np.r_[1.1, 1.2], np.r_[0.7, 1.3]]
+    Sigmas = [np.eye(2)*0.2, np.eye(2)*0.1, np.array([[2.1, -0.1], [-0.1, 2.2]])]
+    post = niw.post(D)
+    post1 = [niw(mu, Sigma) * niw.likelihood(mu, Sigma, D=D) / niw.evidence(D)
+             for mu, Sigma in zip(mus, Sigmas)]
+    post2 = [post(mu, Sigma) for mu, Sigma in zip(mus, Sigmas)]
+    np.testing.assert_array_almost_equal(post1, post2, 10,
+                                         "NIW posterior != prior * likelihood / evidence")
 
 
+@timer
 def test_GaussianMeanKnownVariance():
     mu_0 = 0.0
     sig_0 = 1.0
@@ -48,47 +107,19 @@ def test_GaussianMeanKnownVariance():
     model.like1(*theta, x=x)
     # Or given multiple data points.
     D = np.array([1.0, 1.0, 1.0, 1.3])
-    print model.likelihood(*theta, D=D)
+    model.likelihood(*theta, D=D)
 
     # Evaluate prior
-    print model(*theta)
+    model(*theta)
     # Update prior parameters
-    print model.post_params(D)
+    model.post_params(D)
     # Prior predictive
-    print model.pred(x)
+    model.pred(x)
     # Posterior predictive
-    print model.post_pred(D, x)
+    model.post_pred(D, x)
 
 
-def test_NIG():
-    mu_0 = 0.0
-    V_0 = 1
-    a_0 = 1.0
-    b_0 = 1.0
-    model = prior.NIG(mu_0, V_0, a_0, b_0)
-
-    # Check that we can draw samples from model.
-    model.sample()
-    model.sample(size=10)
-
-    # Check that we can evaluate a likelihood given 1 data point.
-    theta = (1.0, 1.0)
-    x = 0.5
-    model.like1(*theta, x=x)
-    # Or given multiple data points.
-    D = np.array([1.0, 1.0, 1.0, 1.3])
-    print model.likelihood(*theta, D=D)
-
-    # Evaluate prior
-    print model(*theta)
-    # Update prior parameters
-    print model.post_params(D)
-    # Prior predictive
-    print model.pred(x)
-    # Posterior predictive
-    print model.post_pred(D, x)
-
-
+@timer
 def test_NIX_eq_NIG():
     mu_0 = 0.1
     sigsqr_0 = 1.1
@@ -137,6 +168,7 @@ def test_NIX_eq_NIG():
         "NIX and NIG evidences don't agree")
 
 
+@timer
 def test_NIX_integrate():
     import warnings
     mu_0 = -0.1
@@ -194,6 +226,7 @@ def test_NIX_integrate():
                                          "NIX posterior != prior * likelihood / evidence")
 
 
+@timer
 def test_NIG_integrate():
     import warnings
     m_0 = -0.1
@@ -224,7 +257,7 @@ def test_NIG_integrate():
     np.testing.assert_almost_equal(r[0], 1.0, 10,
                                    "NIG posterior predictive density does not integrate to 1.0")
 
-    # Check that the likelihood integrates to 1.  (Should it?)
+    # Check that the likelihood integrates to 1.
     r = quad(lambda x: nig.like1(mu=1.1, var=2.1, x=x), -np.inf, np.inf)
     np.testing.assert_almost_equal(r[0], 1.0, 10,
                                    "NIG likelihood does not integrate to 1.0")
@@ -251,6 +284,7 @@ def test_NIG_integrate():
                                          "NIG posterior != prior * likelihood / evidence")
 
 
+@timer
 def test_scaled_IX_density():
     nu = 1
     sigsqr = 1.0
@@ -259,9 +293,13 @@ def test_scaled_IX_density():
 
 
 if __name__ == "__main__":
-    test_NIW()
+    from argparse import ArgumentParser
+    parser = ArgumentParser()
+    parser.add_argument('--full', action='store_true', help="Run full test suite (slow).")
+    args = parser.parse_args()
+
+    test_NIW(args.full)
     test_GaussianMeanKnownVariance()
-    test_NIG()
     test_NIX_eq_NIG()
     test_NIX_integrate()
     test_NIG_integrate()
