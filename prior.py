@@ -141,7 +141,7 @@ class NIW(Prior):
     Model parameters
     ----------------
     mu :    multivariate mean
-    Sigma : covariance matrix
+    Sig : covariance matrix
 
     Prior parameters
     ----------------
@@ -165,7 +165,7 @@ class NIW(Prior):
         return vTmv(D-Dbar)
 
     def sample(self, size=1):
-        """Return a sample {mu, Sigma} or list of samples [{mu_1, Sigma_1}, ...] from
+        """Return a sample {mu, Sig} or list of samples [{mu_1, Sig_1}, ...] from
         distribution.
         """
         Sig = random_invwish(dof=self.nu_0, invS=self.Lam_0, size=size)
@@ -175,23 +175,23 @@ class NIW(Prior):
             return zip((np.random.multivariate_normal(self.mu_0, S/self.kappa_0) for S in Sig),
                        Sig)
 
-    def like1(self, mu, Sigma, x):
-        """Returns likelihood Pr(x | mu, Sigma), for a single data point."""
-        norm = np.sqrt((2*np.pi)**self.d * np.linalg.det(Sigma))
-        return np.exp(-0.5*vTmv(x-mu, np.linalg.inv(Sigma))) / norm
+    def like1(self, mu, Sig, x):
+        """Returns likelihood Pr(x | mu, Sig), for a single data point."""
+        norm = np.sqrt((2*np.pi)**self.d * np.linalg.det(Sig))
+        return np.exp(-0.5*vTmv(x-mu, np.linalg.inv(Sig)).flat[0]) / norm
 
-    def __call__(self, mu, Sigma):
-        """Returns Pr(mu, Sigma), i.e., the prior."""
+    def __call__(self, mu, Sig):
+        """Returns Pr(mu, Sig), i.e., the prior."""
         nu_0, d = self.nu_0, self.d
         # Eq (249)
         Z = (2.0**(nu_0*d/2.0) * gammad(d, nu_0/2.0) *
              (2.0*np.pi/self.kappa_0)**(d/2.0) / np.linalg.det(self.Lam_0)**(nu_0/2.0))
-        detSig = np.linalg.det(Sigma)
-        invSig = np.linalg.inv(Sigma)
+        detSig = np.linalg.det(Sig)
+        invSig = np.linalg.inv(Sig)
         # Eq (248)
         return 1./Z * detSig**(-((nu_0+d)/2.0+1.0)) * np.exp(
             -0.5*np.trace(np.dot(self.Lam_0, invSig)) -
-            self.kappa_0/2.0*vTmv(mu-self.mu_0, invSig))
+            self.kappa_0/2.0*vTmv(mu-self.mu_0, invSig).flat[0])
 
     def post_params(self, D):
         """Recall D is [NOBS, NDIM]."""
@@ -482,3 +482,49 @@ class InvGamma(Prior):
     def evidence(self, D):
         """Fully marginalized likelihood Pr(D)"""
         raise NotImplementedError
+
+
+class InvWish(Prior):
+    def __init__(self, nu, Psi, mu):
+        self.nu = int(nu)
+        self.Psi = Psi
+        self.mu = mu
+        self.p = len(self.mu)
+        super(InvWish, self).__init__()
+
+    def _S(self, D):
+        """Scatter matrix.  D is [NOBS, NDIM].  Returns [NDIM, NDIM] array."""
+        # Eq (244)
+        Dbar = np.mean(D, axis=0)
+        return vTmv(D-Dbar)
+
+    def sample(self, size=1):
+        Sig = random_invwish(dof=self.nu, invS=self.Psi, size=size)
+
+    def like1(self, Sig, x):
+        norm = np.sqrt((2*np.pi)**self.p * np.linalg.det(Sig))
+        return np.exp(-0.5*vTmv(x-self.mu, np.linalg.inv(Sig)).flat[0]) / norm
+
+    def __call__(self, Sig):
+        nu, p = self.nu, self.p
+        detPsi = np.linalg.det(self.Psi)
+        invPsi = np.linalg.inv(self.Psi)
+        detSig = np.linalg.det(Sig)
+        invSig = np.linalg.inv(Sig)
+        return (detPsi**(nu/2.0) / (2.**(nu*p/2.0) * gammad(p, nu/2.0))*detSig**(-(nu+p+1.0)/2.0) *
+                np.exp(-0.5*np.trace(np.dot(self.Psi, invSig))))
+
+    def post_params(self, D):
+        shape = D.shape
+        if len(shape) == 2:
+            n, d = shape
+            Dbar = np.mean(D, axis=0)
+        elif len(shape) == 1:
+            n, d = 1, shape[0]
+            Dbar = np.mean(D)
+        nu_n = self.nu + n
+        Psi_n = self.Psi + vTmv((D-self.mu))
+        return nu_n, Psi_n, self.mu
+
+    def pred(self, x):
+        return multivariate_t(self.p, self.nu-self.p+1, self.mu, self.Psi/(self.nu-self.p+1), x)
