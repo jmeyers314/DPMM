@@ -5,6 +5,9 @@ import prior
 
 
 def timer(f):
+    import functools
+
+    @functools.wraps(f)
     def f2(*args, **kwargs):
         import time
         import inspect
