@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 from scipy.integrate import quad, dblquad, tplquad
 
@@ -22,7 +23,6 @@ def timer(f):
 
 @timer
 def test_NIW(full=False):
-    import warnings
     mu_0 = np.r_[0.2, 0.1]
     kappa_0 = 2.0
     Lam_0 = np.eye(2)+0.1
@@ -177,13 +177,16 @@ def test_NIX_eq_NIG():
 
 @timer
 def test_NIX():
-    import warnings
     mu_0 = -0.1
     sigsqr_0 = 1.1
     kappa_0 = 2
     nu_0 = 3
 
     nix = prior.NIX(mu_0, kappa_0, sigsqr_0, nu_0)
+
+    D = [1.0, 2.0, 3.0]
+    mus = [1.1, 1.2, 1.3]
+    vars_ = [1.2, 3.2, 2.3]
 
     # Check prior density
     with warnings.catch_warnings():
@@ -197,7 +200,6 @@ def test_NIX():
                                    "NIX prior predictive density does not integrate to 1.0")
 
     # Check posterior density
-    D = [1.0, 2.0, 3.0]
     r = dblquad(nix.post(D), 0.0, np.inf, lambda x: -np.inf, lambda x: np.inf)
     np.testing.assert_almost_equal(r[0], 1.0, 7, "NIX posterior density does not integrate to 1.0")
 
@@ -223,8 +225,6 @@ def test_NIX():
                                    "NIX evidence does not integrate to 1.0")
 
     # Check that posterior = prior * likelihood / evidence
-    mus = [1.1, 1.2, 1.3]
-    vars_ = [1.2, 3.2, 2.3]
     post = nix.post(D)
     post1 = [nix(mu, var)*nix.likelihood(mu, var, D=D) / nix.evidence(D)
              for mu, var in zip(mus, vars_)]
@@ -232,16 +232,33 @@ def test_NIX():
     np.testing.assert_array_almost_equal(post1, post2, 10,
                                          "NIX posterior != prior * likelihood / evidence")
 
+    # Test that marginal variance probability method matches integrated result.
+    Pr_var1 = [nix.marginal_var(var) for var in vars_]
+    Pr_var2 = [quad(lambda mu: nix(mu, var), -np.inf, np.inf)[0] for var in vars_]
+    np.testing.assert_array_almost_equal(
+        Pr_var1, Pr_var2, 10,
+        "Pr(var) method calculation does not match integrated result.")
+
+    # Test that marginal mean probability method matches integrated result.
+    Pr_mu1 = [nix.marginal_mu(mu) for mu in mus]
+    Pr_mu2 = [quad(lambda var: nix(mu, var), 0.0, np.inf)[0] for mu in mus]
+    np.testing.assert_array_almost_equal(
+        Pr_mu1, Pr_mu2, 10,
+        "Pr(mu) method calculation does not match integrated result.")
+
 
 @timer
 def test_NIG():
-    import warnings
     m_0 = -0.1
     V_0 = 1.1
     a_0 = 2.0
     b_0 = 3.0
 
     nig = prior.NIG(m_0, V_0, a_0, b_0)
+
+    D = [1.0, 2.0, 3.0]
+    mus = [1.1, 1.2, 1.3]
+    vars_ = [1.2, 3.2, 2.3]
 
     # Check prior density
     with warnings.catch_warnings():
@@ -255,7 +272,6 @@ def test_NIG():
                                    "NIG prior predictive density does not integrate to 1.0")
 
     # Check posterior density
-    D = [1.0, 2.0, 3.0]
     r = dblquad(nig.post(D), 0.0, np.inf, lambda x: -np.inf, lambda x: np.inf)
     np.testing.assert_almost_equal(r[0], 1.0, 7, "NIG posterior density does not integrate to 1.0")
 
@@ -281,14 +297,26 @@ def test_NIG():
                                    "NIG evidence does not integrate to 1.0")
 
     # Check that posterior = prior * likelihood / evidence
-    mus = [1.1, 1.2, 1.3]
-    vars_ = [1.2, 3.2, 2.3]
     post = nig.post(D)
     post1 = [nig(mu, var)*nig.likelihood(mu, var, D=D) / nig.evidence(D)
              for mu, var in zip(mus, vars_)]
     post2 = [post(mu, var) for mu, var in zip(mus, vars_)]
     np.testing.assert_array_almost_equal(post1, post2, 10,
                                          "NIG posterior != prior * likelihood / evidence")
+
+    # Test that marginal variance probability method matches integrated result.
+    Pr_var1 = [nig.marginal_var(var) for var in vars_]
+    Pr_var2 = [quad(lambda mu: nig(mu, var), -np.inf, np.inf)[0] for var in vars_]
+    np.testing.assert_array_almost_equal(
+        Pr_var1, Pr_var2, 10,
+        "Pr(var) method calculation does not match integrated result.")
+
+    # Test that marginal mean probability method matches integrated result.
+    Pr_mu1 = [nig.marginal_mu(mu) for mu in mus]
+    Pr_mu2 = [quad(lambda var: nig(mu, var), 0.0, np.inf)[0] for mu in mus]
+    np.testing.assert_array_almost_equal(
+        Pr_mu1, Pr_mu2, 10,
+        "Pr(mu) method calculation does not match integrated result.")
 
 
 @timer
@@ -297,13 +325,38 @@ def test_scaled_IX_density():
     sigsqr = 1.0
     r = quad(lambda x: prior.scaled_IX_density(nu, sigsqr, x), 0.0, np.inf)
     np.testing.assert_almost_equal(r[0], 1.0, 10, "scaled_IX_density does not integrate to 1.0")
+    # test mean
+    mean = nu*sigsqr/(nu-2)
+    r = quad(lambda x: prior.scaled_IX_density(nu, sigsqr, x)*x, 0.0, np.inf)
+    np.testing.assert_almost_equal(r[0], mean, 10, "scaled_IX_density has wrong mean")
+    # test variance
+    var = 2.0*nu**2*sigsqr/(nu-2.0)**2/(nu-4.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        r = quad(lambda x: prior.scaled_IX_density(nu, sigsqr, x)*(x-mean)**2, 0.0, np.inf)
+    np.testing.assert_almost_equal(r[0], var, 8, "scaled_IX_density has wrong variance")
+
+
+@timer
+def test_t_density():
+    nu = 3
+    mu = 2.2
+    sigsqr = 1.51
+    r = quad(lambda x: prior.t_density(nu, mu, sigsqr, x), -np.inf, np.inf)
+    np.testing.assert_almost_equal(r[0], 1.0, 10, "t_density does not integrate to 1.0")
+    # test mean
+    r = quad(lambda x: prior.t_density(nu, mu, sigsqr, x)*x, -np.inf, np.inf)
+    np.testing.assert_almost_equal(r[0], mu, 10, "t_density has wrong mean")
+    # test variance
+    r = quad(lambda x: prior.t_density(nu, mu, sigsqr, x)*(x-mu)**2, -np.inf, np.inf)
+    np.testing.assert_almost_equal(r[0], nu*sigsqr/(nu-2), 10, "t_density has wrong variance")
 
 
 @timer
 def test_InvGamma():
-    alpha = 1.0
-    beta = 1.0
-    mu = 0.0
+    alpha = 1.1
+    beta = 1.2
+    mu = 0.1
     ig = prior.InvGamma(alpha, beta, mu)
     ig.sample()
 
@@ -342,6 +395,16 @@ def test_InvGamma():
     np.testing.assert_array_almost_equal(
         posts/posts[0], posts2/posts2[0], 5,
         "InvGamma posterior not proportional to prior * likelihood.")
+
+    # Check mean and variance
+    mean = 1./beta/(alpha-1.0)
+    np.testing.assert_almost_equal(quad(lambda x: ig(x)*x, 0.0, np.inf)[0], mean, 10,
+                                   "InvGamma has wrong mean.")
+    var = beta**(-2)/(alpha-1)**2/(alpha-2)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        np.testing.assert_almost_equal(quad(lambda x: ig(x)*(x-mean)**2, 0.0, np.inf)[0], var, 5,
+                                       "InvGamma has wrong variance.")
 
 
 @timer
@@ -405,6 +468,7 @@ if __name__ == "__main__":
     test_NIX_eq_NIG()
     test_NIX()
     test_NIG()
+    test_t_density()
     test_scaled_IX_density()
     test_InvGamma()
     test_InvWish(args.full)

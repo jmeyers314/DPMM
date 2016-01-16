@@ -333,11 +333,12 @@ class NIX(Prior):
         super(NIX, self).__init__()
 
     def sample(self, size=1):
-        var = 1./np.random.chisquare(df=self.nu_0, size=size)*self.sigsqr_0  # sanity check this.
+        # sanity check this.
+        var = 1./np.random.chisquare(df=self.nu_0, size=size)*self.nu_0*self.sigsqr_0
         if size == 1:
-            return np.random.normal(self.mu_0, var/self.kappa_0), var
+            return np.random.normal(self.mu_0, np.sqrt(var/self.kappa_0)), var
         else:
-            return zip((np.random.normal(self.mu_0, v/self.kappa_0) for v in var), var)
+            return zip((np.random.normal(self.mu_0, np.sqrt(v/self.kappa_0)) for v in var), var)
 
     def like1(self, mu, var, x):
         """Returns likelihood Pr(x | mu, var), for a single data point."""
@@ -377,6 +378,13 @@ class NIX(Prior):
                 (nu_n*sigsqr_n)**(nu_n/2.0) /
                 np.pi**(n/2.0))
 
+    def marginal_var(self, var):
+        """Return Pr(var)"""
+        return scaled_IX_density(self.nu_0, self.sigsqr_0, var)
+
+    def marginal_mu(self, mu):
+        return t_density(self.nu_0, self.mu_0, self.sigsqr_0/self.kappa_0, mu)
+
 
 class NIG(Prior):
     """Normal-Inverse-Gamma prior for univariate Gaussian with params for mean and variance.
@@ -390,7 +398,7 @@ class NIG(Prior):
     ----------------
     mu_0 :  prior mean
     V_0
-    a_0, b_0 : gamma parameters
+    a_0, b_0 : gamma parameters (note these are a/b-like, not alpha/beta-like)
     """
     def __init__(self, m_0, V_0, a_0, b_0):
         self.m_0 = float(m_0)
@@ -400,11 +408,11 @@ class NIG(Prior):
         super(NIG, self).__init__()
 
     def sample(self, size=1):
-        var = 1./np.random.gamma(self.a_0, self.b_0, size=size)
+        var = 1./np.random.gamma(self.a_0, scale=1./self.b_0, size=size)
         if size == 1:
-            return np.random.normal(self.m_0, self.V_0*np.sqrt(var)), var
+            return np.random.normal(self.m_0, np.sqrt(self.V_0*var)), var
         else:
-            return zip(np.random.normal(self.m_0, self.V_0*np.sqrt(var), size=size), var)
+            return zip(np.random.normal(self.m_0, np.sqrt(self.V_0*var), size=size), var)
 
     def like1(self, mu, var, x):
         """Returns likelihood Pr(x | mu, var), for a single data point."""
@@ -446,8 +454,26 @@ class NIG(Prior):
         return (np.sqrt(np.abs(V_n/self.V_0)) * (self.b_0**self.a_0)/(b_n**a_n) *
                 gamma(a_n)/gamma(self.a_0) / (np.pi**(n/2.0)*2.0**(n/2.0)))
 
+    def marginal_var(self, var):
+        """Return Pr(var)"""
+        # Don't have an independent source for this, so convert params to NIX and use that result.
+        nu_0 = 2*self.a_0
+        sigsqr_0 = 2*self.b_0/nu_0
+        return scaled_IX_density(nu_0, sigsqr_0, var)
+
+    def marginal_mu(self, mu):
+        """Return Pr(mu)"""
+        # Don't have an independent source for this, so convert params to NIX and use that result.
+        mu_0 = self.m_0
+        kappa_0 = 1./self.V_0
+        nu_0 = 2*self.a_0
+        sigsqr_0 = 2*self.b_0/nu_0
+        return t_density(nu_0, mu_0, sigsqr_0/kappa_0, mu)
+
+
 
 class InvGamma(Prior):
+    """Inverse Gamma distribution.  Note this parameterization matches Murphy's, not wikipedia's.s"""
     def __init__(self, alpha, beta, mu):
         self.alpha = alpha
         self.beta = beta
@@ -455,7 +481,7 @@ class InvGamma(Prior):
         super(InvGamma, self).__init__()
 
     def sample(self, size=1):
-        return 1./np.random.gamma(self.alpha, self.beta, size=size)
+        return 1./np.random.gamma(self.alpha, scale=self.beta, size=size)
 
     def like1(self, var, x):
         """Returns likelihood Pr(x | var), for a single data point."""
@@ -463,17 +489,17 @@ class InvGamma(Prior):
 
     def __call__(self, var):
         """Returns Pr(var), i.e., the prior density."""
-        a, b = self.alpha, self.beta
-        return b**a/gamma(a)*var**(-1.-a)*np.exp(-b/var)
+        al, be = self.alpha, self.beta
+        return be**(-al)/gamma(al) * var**(-1.-al) * np.exp(-1./(be*var))
 
     def post_params(self, D):
         try:
             n = len(D)
         except TypeError:
             n = 1
-        a_n = self.alpha + n/2.0
-        b_n = self.beta + 0.5*np.sum((np.array(D)-self.mu)**2)
-        return a_n, b_n, self.mu
+        al_n = self.alpha + n/2.0
+        be_n = 1./(1./self.beta + 0.5*np.sum((np.array(D)-self.mu)**2))
+        return al_n, be_n, self.mu
 
     def pred(self, x):
         """Prior predictive.  Pr(x)"""
