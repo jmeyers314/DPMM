@@ -1,8 +1,10 @@
 """ Going to try algorithm 1 from Neal (2000)
 """
 
-import numpy as np
 import bisect
+import itertools
+
+import numpy as np
 
 
 def pick_discrete(p):
@@ -63,8 +65,8 @@ class DPMM2(object):
     @param prior    The prior object for whatever model is being inferred.
     @param alpha    Concentration parameter.
     @param D        Data.
-    @param phi      Optional initial state for sampler.
-    @param label    Optional initial class labels for sampler.
+    @param phi      Optional initial state for each cluster.
+    @param label    Optional initial cluster labels for each data point.
     """
     def __init__(self, prior, alpha, D, phi=None, label=None):
         self.prior = prior
@@ -73,11 +75,13 @@ class DPMM2(object):
         self.n = len(self.D)
 
         if phi is None:
-            # Draw from the prior.  Use a list for this one, since the length will be changing.
-            phi = [self.prior.sample() for i in xrange(self.n)]
-            nphi = [1]*self.n
-            # Give each sample it's own class label.
-            label = np.arange(self.n)
+            # It's easier to create new clusters than to destroy existing clusters, so start off
+            # with all data points in a single cluster.
+            phi = [self.prior.post(D).sample()]
+            nphi = [self.n]
+            label = np.zeros((self.n), dtype=int)
+        if nphi is None:
+            nphi = [np.sum(label == i) for i in xrange(label.max())]
 
         self.phi = phi
         self.nphi = nphi
@@ -88,7 +92,7 @@ class DPMM2(object):
 
     def draw_new_label(self, i):
         p = [self.prior.like1(*phi, x=self.D[i])*nphi
-             for phi, nphi in zip(self.phi, self.nphi)]
+             for phi, nphi in itertools.izip(self.phi, self.nphi)]
         p.append(self.r_i[i])
         p = np.array(p)
         p /= np.sum(p)
