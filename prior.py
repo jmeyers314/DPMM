@@ -30,20 +30,19 @@ def gammad(d, nu_over_2):
     return np.pi**(d*(d-1.)/4)*np.multiply.reduce([gamma(0.5*(nu+1-i)) for i in range(d)])
 
 
-def multivariate_t(d, nu, mu, Sig, x=None):
-    """Return multivariate t distribution: t_nu(x | mu, Sig), in d-dimensions.  If x is None,
-    return a callable."""
+def multivariate_t_density(nu, mu, Sig, x):
+    """Return multivariate t distribution: t_nu(x | mu, Sig), in d-dimensions."""
     detSig = np.linalg.det(Sig)
     invSig = np.linalg.inv(Sig)
+    d = len(mu)
     coef = gamma(nu/2.0+d/2.0) * detSig**(-0.5)
     coef /= gamma(nu/2.0) * nu**(d/2.0)*np.pi**(d/2.0)
-
-    def f(x):
-        return coef * (1.0 + 1./nu*vTmv((x-mu).T, invSig))**(-(nu+d)/2.0)
-    if x is None:
-        return f
+    x = np.array(x)
+    if len(x.shape) == 1:
+        return coef * (1.0 + 1./nu*vTmv((x-mu).T, invSig)[0, 0])**(-(nu+d)/2.0)
     else:
-        return f(x)
+        prod = np.array([vTmv(x_.T, invSig)[0, 0] for x_ in (x-mu)])
+        return coef * (1.0 + prod/nu)**(-(nu+d)/2.0)
 
 
 def t_density(nu, mu, sigsqr, x):
@@ -197,10 +196,10 @@ class NIW(Prior):
         """Recall D is [NOBS, NDIM]."""
         shape = D.shape
         if len(shape) == 2:
-            n, d = shape
+            n = shape[0]
             Dbar = np.mean(D, axis=0)
         elif len(shape) == 1:
-            n, d = 1, shape[0]
+            n = 1
             Dbar = np.mean(D)
         # Eq (252)
         kappa_n = self.kappa_0 + n
@@ -217,8 +216,8 @@ class NIW(Prior):
 
     def pred(self, x):
         """Prior predictive.  Pr(x)"""
-        return multivariate_t(self.d, self.nu_0-self.d+1, self.mu_0,
-                              self.Lam_0*(self.kappa_0+1)/(self.kappa_0 - self.d + 1), x)
+        return multivariate_t_density(self.nu_0-self.d+1, self.mu_0,
+                                      self.Lam_0*(self.kappa_0+1)/(self.kappa_0 - self.d + 1), x)
 
     def evidence(self, D):
         """Return Pr(D) = \int Pr(D | theta) Pr(theta)"""
@@ -471,7 +470,6 @@ class NIG(Prior):
         return t_density(nu_0, mu_0, sigsqr_0/kappa_0, mu)
 
 
-
 class InvGamma(Prior):
     """Inverse Gamma distribution.  Note this parameterization matches Murphy's, not wikipedia's.s"""
     def __init__(self, alpha, beta, mu):
@@ -511,6 +509,7 @@ class InvGamma(Prior):
 
 
 class InvWish(Prior):
+    """Under construction."""
     def __init__(self, nu, Psi, mu):
         self.nu = int(nu)
         self.Psi = Psi
@@ -553,4 +552,4 @@ class InvWish(Prior):
         return nu_n, Psi_n, self.mu
 
     def pred(self, x):
-        return multivariate_t(self.p, self.nu-self.p+1, self.mu, self.Psi/(self.nu-self.p+1), x)
+        return multivariate_t_density(self.nu-self.p+1, self.mu, self.Psi/(self.nu-self.p+1), x)
