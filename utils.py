@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.special import gamma
-
+import bisect
 
 def timer(f):
     import functools
@@ -57,3 +57,10 @@ def random_wish(dof, S, size=1):
 
 def random_invwish(dof, invS, size=1):
     return np.linalg.inv(random_wish(dof, invS, size=size))
+
+
+def pick_discrete(p):
+    """Pick a discrete integer between 0 and len(p) - 1 with probability given by p array."""
+    c = np.cumsum(p)
+    u = np.random.uniform()
+    return bisect.bisect_left(c, u)
