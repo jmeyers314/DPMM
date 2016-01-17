@@ -4,78 +4,8 @@
 from operator import mul
 import numpy as np
 from scipy.special import gamma
-
-
-def vTmv(vec, mat=None, vec2=None):
-    """Multiply a vector transpose times a matrix times a vector.
-
-    @param vec  The first vector (will be transposed).
-    @param mat  The matrix in the middle.  Identity by default.
-    @param vec2 The second vector (will not be transposed.)  By default, the same as the vec.
-    @returns    Product.  Could be a scalar or a matrix depending on whether vec is a row or column
-                vector.
-    """
-    if len(vec.shape) == 1:
-        vec = np.reshape(vec, [vec.shape[0], 1])
-    if mat is None:
-        mat = np.eye(len(vec))
-    if vec2 is None:
-        vec2 = vec
-    return np.dot(vec.T, np.dot(mat, vec2))
-
-
-def gammad(d, nu_over_2):
-    """D-dimensional gamma function."""
-    nu = 2.0 * nu_over_2
-    return np.pi**(d*(d-1.)/4)*np.multiply.reduce([gamma(0.5*(nu+1-i)) for i in range(d)])
-
-
-def multivariate_t_density(nu, mu, Sig, x):
-    """Return multivariate t distribution: t_nu(x | mu, Sig), in d-dimensions."""
-    detSig = np.linalg.det(Sig)
-    invSig = np.linalg.inv(Sig)
-    d = len(mu)
-    coef = gamma(nu/2.0+d/2.0) * detSig**(-0.5)
-    coef /= gamma(nu/2.0) * nu**(d/2.0)*np.pi**(d/2.0)
-    x = np.array(x)
-    if len(x.shape) == 1:
-        return coef * (1.0 + 1./nu*vTmv((x-mu).T, invSig)[0, 0])**(-(nu+d)/2.0)
-    else:
-        prod = np.array([vTmv(x_.T, invSig)[0, 0] for x_ in (x-mu)])
-        return coef * (1.0 + prod/nu)**(-(nu+d)/2.0)
-
-
-def t_density(nu, mu, sigsqr, x):
-    c = gamma((nu+1.)/2.)/gamma(nu/2.)/np.sqrt(nu*np.pi*sigsqr)
-    return c*(1.0+1./nu*((x-mu)**2/sigsqr))**(-(1.+nu)/2.0)
-
-
-def scaled_IX_density(nu, sigsqr, x):
-    return (1.0/gamma(nu/2.0) *
-            (nu*sigsqr/2.0)**(nu/2.0) *
-            x**(-nu/2.0-1.0) *
-            np.exp(-nu*sigsqr/(2.0*x)))
-
-
-def normal_density(mu, var, x):
-    return np.exp(-0.5*(x-mu)**2/var)/np.sqrt(2*np.pi*var)
-
-
-def random_wish(dof, S, size=1):
-    dim = S.shape[0]
-    if size == 1:
-        x = np.random.multivariate_normal(np.zeros(dim), S, size=dof)
-        return np.dot(x.T, x)
-    else:
-        out = np.empty((size, dim, dim), dtype=np.float64)
-        for i in range(size):
-            x = np.random.multivariate_normal(np.zeros(dim), S, size=dof)
-            out[i] = np.dot(x.T, x)
-        return out
-
-
-def random_invwish(dof, invS, size=1):
-    return np.linalg.inv(random_wish(dof, invS, size=size))
+from utils import vTmv, gammad, random_invwish
+from density import multivariate_t_density, t_density, normal_density, scaled_IX_density
 
 
 class Prior(object):
@@ -224,10 +154,8 @@ class NIW(Prior):
         shape = D.shape
         if len(shape) == 2:
             n, d = shape
-            Dbar = np.mean(D, axis=0)
         elif len(shape) == 1:
             n, d = 1, shape[0]
-            Dbar = np.mean(D)
         assert d == self.d
         # Eq (266)
         mu_n, kappa_n, Lam_n, nu_n = self.post_params(D)
