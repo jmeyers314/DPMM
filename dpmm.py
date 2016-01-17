@@ -34,7 +34,7 @@ class DPMM(object):
         self.theta = theta
 
         # Initialize r_i array
-        self.r_i = self.alpha * np.array([prior.pred(x) for x in D])
+        self.r_i = self.alpha * prior.pred(D)
 
     def q(self, i):
         # compute and return row of q_ij matrix (we only ever need one row at a time).
@@ -88,7 +88,7 @@ class DPMM2(object):
         self.label = label
 
         # Initialize r_i array again
-        self.r_i = self.alpha * np.array([prior.pred(x) for x in D])
+        self.r_i = self.alpha * prior.pred(D)
 
     def draw_new_label(self, i):
         p = [self.prior.like1(*phi, x=self.D[i])*nphi
