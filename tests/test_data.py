@@ -16,11 +16,11 @@ def test_advanced_indexing():
 
     np.testing.assert_equal(psd.data[2], psd[[2, 6]].data[0],
                             "Advanced indexing didn't work for PseudoMarginalData")
-    np.testing.assert_equal(psd.interim_post[2], psd[[2, 6]].interim_post[0],
+    np.testing.assert_equal(psd.interim_prior[2], psd[[2, 6]].interim_prior[0],
                             "Advanced indexing didn't work for PseudoMarginalData")
     np.testing.assert_equal(psd.data[6], psd[[2, 6]].data[1],
                             "Advanced indexing didn't work for PseudoMarginalData")
-    np.testing.assert_equal(psd.interim_post[6], psd[[2, 6]].interim_post[1],
+    np.testing.assert_equal(psd.interim_prior[6], psd[[2, 6]].interim_prior[1],
                             "Advanced indexing didn't work for PseudoMarginalData")
 
 
