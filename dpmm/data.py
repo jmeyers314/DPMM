@@ -1,13 +1,15 @@
 import numpy as np
+from utils import pick_discrete
 
 
 class PseudoMarginalData(object):
     def __init__(self, data, interim_prior):
+        # Data should have dims [NOBJ, NSAMPLE, NDIM]
+        # interim_prior should have dims [NOBJ, NSAMPLE]
         self.data = data
         self.interim_prior = interim_prior
 
-        self.shape = self.data.shape
-        self.nobj, self.nsample, self.ndim = self.shape
+        self.nobj, self.nsample, self.ndim = self.data.shape
 
         if self.interim_prior.shape != (self.nobj, self.nsample):
             ds = self.data.shape
@@ -27,3 +29,10 @@ class PseudoMarginalData(object):
             return cls(self.data[np.newaxis, index], self.interim_prior[np.newaxis, index])
         else:
             return cls(self.data[index], self.interim_prior[index])
+
+    def random_sample(self):
+        """Return a [NOBJ, NDIM] numpy array sampling over NSAMPLE using inverse interim_prior
+        weights.  Needed to compute a posterior object."""
+        ps = 1./self.interim_prior
+        ps /= np.sum(ps, axis=1)[:, np.newaxis]
+        return np.array([self.data[i, pick_discrete(p)] for i, p in enumerate(ps)])

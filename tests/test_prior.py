@@ -23,7 +23,7 @@ def test_NormInvWish(full=False):
     # Check that we can evaluate a likelihood given data.
     theta = (np.r_[1., 1.], np.eye(2)+0.12)
     D = np.array([[0.1, 0.2], [0.2, 0.3], [0.1, 0.2], [0.4, 0.3]])
-    niw.likelihood(*theta, D=D)
+    niw.likelihood(D, *theta)
 
     # Evaluate prior
     niw(*theta)
@@ -43,7 +43,7 @@ def test_NormInvWish(full=False):
         r[0], 1.0, 5, "NormInvWish posterior predictive density does not integrate to 1.0")
 
     # Check that the likelihood of a single point in 2 dimensions integrates to 1.
-    r = dblquad(lambda x, y: niw.like1(mu=np.r_[1.2, 1.1], Sig=np.eye(2)+0.12, x=[x, y]),
+    r = dblquad(lambda x, y: niw.like1([x, y], mu=np.r_[1.2, 1.1], Sig=np.eye(2)+0.12),
                 -np.inf, np.inf, lambda x: -np.inf, lambda x: np.inf)
     np.testing.assert_almost_equal(r[0], 1.0, 10,
                                    "NormInvWish likelihood does not integrate to 1.0")
@@ -51,7 +51,7 @@ def test_NormInvWish(full=False):
     if __name__ == "__main__" and full:
         # Check that likelihood of a single point in 3 dimensions integrates to 1.
         niw3 = dpmm.NormInvWish([1]*3, 2.0, np.eye(3), 3)
-        r = tplquad(lambda x, y, z: niw3.like1(np.r_[0.1, 0.2, 0.3], np.eye(3)+0.1, [x, y, z]),
+        r = tplquad(lambda x, y, z: niw3.like1([x, y, z], np.r_[0.1, 0.2, 0.3], np.eye(3)+0.1),
                     -np.inf, np.inf,
                     lambda x: -np.inf, lambda x: np.inf,
                     lambda x, y: -np.inf, lambda x, y: np.inf)
@@ -63,7 +63,7 @@ def test_NormInvWish(full=False):
     mus = [np.r_[2.1, 1.1], np.r_[0.9, 1.2], np.r_[0.9, 1.1]]
     Sigs = [np.eye(2)*1.5, np.eye(2)*0.7, np.array([[1.1, -0.1], [-0.1, 1.2]])]
     posts = [niw.post(D)(mu, Sig) for mu, Sig in zip(mus, Sigs)]
-    posts2 = [niw(mu, Sig)*niw.likelihood(mu, Sig, D=D) for mu, Sig, in zip(mus, Sigs)]
+    posts2 = [niw(mu, Sig)*niw.likelihood(D, mu, Sig) for mu, Sig, in zip(mus, Sigs)]
 
     np.testing.assert_array_almost_equal(
         posts/posts[0], posts2/posts2[0], 5,
@@ -73,7 +73,7 @@ def test_NormInvWish(full=False):
     mus = [np.r_[1.1, 1.1], np.r_[1.1, 1.2], np.r_[0.7, 1.3]]
     Sigs = [np.eye(2)*0.2, np.eye(2)*0.1, np.array([[2.1, -0.1], [-0.1, 2.2]])]
     post = niw.post(D)
-    post1 = [niw(mu, Sig) * niw.likelihood(mu, Sig, D=D) / niw.evidence(D)
+    post1 = [niw(mu, Sig) * niw.likelihood(D, mu, Sig) / niw.evidence(D)
              for mu, Sig in zip(mus, Sigs)]
     post2 = [post(mu, Sig) for mu, Sig in zip(mus, Sigs)]
     np.testing.assert_array_almost_equal(post1, post2, 10,
@@ -114,7 +114,7 @@ def test_GaussianMeanKnownVariance():
         "GaussianMeanKnownVariance posterior predictive density does not integrate to 1.0")
 
     # Check that the likelihood integrates to 1.
-    r = quad(lambda x: model.like1(mu=1.1, x=x), -np.inf, np.inf)
+    r = quad(lambda x: model.like1(x, mu=1.1), -np.inf, np.inf)
     np.testing.assert_almost_equal(r[0], 1.0, 10,
                                    "GaussianMeanKnownVariance likelihood does not integrate to 1.0")
 
@@ -141,7 +141,7 @@ def test_GaussianMeanKnownVariance():
     # Check that posterior is proportional to prior * likelihood
     # Add some more data points
     posts = [model.post(D)(mu) for mu in mus]
-    posts2 = [model(mu)*model.likelihood(mu, D=D) for mu in mus]
+    posts2 = [model(mu)*model.likelihood(D, mu) for mu in mus]
 
     np.testing.assert_array_almost_equal(
         posts/posts[0], posts2/posts2[0], 5,
@@ -192,7 +192,7 @@ def test_NormInvChi2_eq_NormInvGamma():
 
     for mu, var, x in zip(mus, vars_, xs):
         np.testing.assert_almost_equal(
-            model1.like1(mu, var, x), model2.like1(mu, var, x), 10,
+            model1.like1(x, mu, var), model2.like1(x, mu, var), 10,
             "NormInvChi2 and NormInvGamma likelihoods don't " +
             "agree at mu, var, x = {}, {}, {}".format(mu, var, x))
 
@@ -238,7 +238,7 @@ def test_NormInvChi2():
         "NormInvChi2 posterior predictive density does not integrate to 1.0")
 
     # Check that the likelihood integrates to 1.
-    r = quad(lambda x: nix.like1(mu=1.1, var=2.1, x=x), -np.inf, np.inf)
+    r = quad(lambda x: nix.like1(x, mu=1.1, var=2.1), -np.inf, np.inf)
     np.testing.assert_almost_equal(r[0], 1.0, 10,
                                    "NormInvChi2 likelihood does not integrate to 1.0")
 
@@ -255,7 +255,7 @@ def test_NormInvChi2():
 
     # Check that posterior = prior * likelihood / evidence
     post = nix.post(D)
-    post1 = [nix(mu, var)*nix.likelihood(mu, var, D=D) / nix.evidence(D)
+    post1 = [nix(mu, var)*nix.likelihood(D, mu, var) / nix.evidence(D)
              for mu, var in zip(mus, vars_)]
     post2 = [post(mu, var) for mu, var in zip(mus, vars_)]
     np.testing.assert_array_almost_equal(post1, post2, 10,
@@ -314,7 +314,7 @@ def test_NormInvGamma():
         "NormInvGamma posterior predictive density does not integrate to 1.0")
 
     # Check that the likelihood integrates to 1.
-    r = quad(lambda x: nig.like1(mu=1.1, var=2.1, x=x), -np.inf, np.inf)
+    r = quad(lambda x: nig.like1(x, mu=1.1, var=2.1), -np.inf, np.inf)
     np.testing.assert_almost_equal(r[0], 1.0, 10,
                                    "NormInvGamma likelihood does not integrate to 1.0")
 
@@ -331,7 +331,7 @@ def test_NormInvGamma():
 
     # Check that posterior = prior * likelihood / evidence
     post = nig.post(D)
-    post1 = [nig(mu, var)*nig.likelihood(mu, var, D=D) / nig.evidence(D)
+    post1 = [nig(mu, var)*nig.likelihood(D, mu, var) / nig.evidence(D)
              for mu, var in zip(mus, vars_)]
     post2 = [post(mu, var) for mu, var in zip(mus, vars_)]
     np.testing.assert_array_almost_equal(post1, post2, 10,
@@ -381,7 +381,7 @@ def test_InvGamma():
         r[0], 1.0, 10, "InvGamma posterior predictive density does not integrate to 1.0")
 
     # Check that the likelihood integrates to 1.
-    r = quad(lambda x: ig.like1(var=2.1, x=x), -np.inf, np.inf)
+    r = quad(lambda x: ig.like1(x, var=2.1), -np.inf, np.inf)
     np.testing.assert_almost_equal(r[0], 1.0, 10,
                                    "InvGamma likelihood does not integrate to 1.0")
 
@@ -390,7 +390,7 @@ def test_InvGamma():
     D = np.array([1.0, 2.0, 3.0, 2.2, 2.3, 1.2])
     vars_ = [0.7, 1.1, 1.2, 1.5]
     posts = [ig.post(D)(var) for var in vars_]
-    posts2 = [ig(var)*ig.likelihood(var, D=D) for var in vars_]
+    posts2 = [ig(var)*ig.likelihood(D, var) for var in vars_]
 
     np.testing.assert_array_almost_equal(
         posts/posts[0], posts2/posts2[0], 5,
@@ -429,7 +429,7 @@ def test_InvWish(full=False):
                                    "InvWish posterior predictive density does not integrate to 1.0")
 
     # Check that the likelihood of a single point in 2 dimensions integrates to 1.
-    r = dblquad(lambda x, y: iw.like1(Sig=np.eye(2)+0.12, x=[x, y]),
+    r = dblquad(lambda x, y: iw.like1([x, y], Sig=np.eye(2)+0.12),
                 -np.inf, np.inf, lambda x: -np.inf, lambda x: np.inf)
     np.testing.assert_almost_equal(r[0], 1.0, 10,
                                    "InvWish likelihood does not integrate to 1.0")
@@ -437,7 +437,7 @@ def test_InvWish(full=False):
     if __name__ == "__main__" and full:
         # Check that likelihood of a single point in 3 dimensions integrates to 1.
         iw2 = dpmm.InvWish(3, np.eye(3), [1]*3)
-        r = tplquad(lambda x, y, z: iw2.like1(np.eye(3)+0.1, [x, y, z]),
+        r = tplquad(lambda x, y, z: iw2.like1([x, y, z], np.eye(3)+0.1),
                     -np.inf, np.inf,
                     lambda x: -np.inf, lambda x: np.inf,
                     lambda x, y: -np.inf, lambda x, y: np.inf)
@@ -450,7 +450,7 @@ def test_InvWish(full=False):
                   [2.2, 1.1], [2.3, 1.1], [2.5, 2.3]])
     Sigs = [np.eye(2)*1.5, np.eye(2)*0.7, np.array([[1.1, -0.1], [-0.1, 1.2]])]
     posts = [iw.post(D)(Sig) for Sig in Sigs]
-    posts2 = [iw(Sig)*iw.likelihood(Sig, D=D) for Sig in Sigs]
+    posts2 = [iw(Sig)*iw.likelihood(D, Sig) for Sig in Sigs]
 
     np.testing.assert_array_almost_equal(
         posts/posts[0], posts2/posts2[0], 5,

@@ -29,7 +29,7 @@ class DPMM(object):
             # 2) Store cluster params in a list so that it's easy to expand/contract as the sampler
             #    samples different numbers of components.
             # 3) Finally, each element of phi should be a tuple so that we can call
-            #    prior.like1(*phi, x).
+            #    prior.like1(x, *phi).
             phi = [self.prior.post(D).sample()]
             nphi = [self.n]  # Number of data points assigned to each tuple.
             label = np.zeros((self.n), dtype=int)  # cluster assignment for each data point.
@@ -46,8 +46,8 @@ class DPMM(object):
 
     def draw_new_label(self, i):
         # This is essentially Neal (2000) equation (3.6)
-        # Start of with the probabilities for cloning an existing cluster:
-        p = [self.prior.like1(*phi, x=self.D[i])*nphi
+        # Start off with the probabilities for cloning an existing cluster:
+        p = [self.prior.like1(self.D[i], *phi)*nphi
              for phi, nphi in itertools.izip(self.phi, self.nphi)]
         # and then append the probability to create a new cluster.
         p.append(self.r_i[i])
