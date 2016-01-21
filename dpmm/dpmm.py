@@ -5,6 +5,7 @@ import itertools
 
 import numpy as np
 from utils import pick_discrete
+from data import PseudoMarginalData
 
 
 class DPMM(object):
@@ -19,7 +20,10 @@ class DPMM(object):
     def __init__(self, prior, alpha, D, phi=None, label=None):
         self.prior = prior
         self.alpha = alpha
-        self.D = D  # data
+        self._D = D  # data
+
+        self._initD()
+
         self.n = len(self.D)
 
         if phi is None:
@@ -30,7 +34,7 @@ class DPMM(object):
             #    samples different numbers of components.
             # 3) Finally, each element of phi should be a tuple so that we can call
             #    prior.like1(x, *phi).
-            phi = [self.prior.post(D).sample()]
+            phi = [self.prior.post(self.D).sample()]
             nphi = [self.n]  # Number of data points assigned to each tuple.
             label = np.zeros((self.n), dtype=int)  # cluster assignment for each data point.
         if nphi is None:
@@ -42,7 +46,14 @@ class DPMM(object):
 
         # Initialize r_i array
         # This is Neal (2000) equation (3.4) without the b factor.
-        self.r_i = self.alpha * prior.pred(D)
+        self.r_i = self.alpha * prior.pred(self.D)
+
+    def _initD(self):
+        """Initialize latent data vector."""
+        if isinstance(self._D, PseudoMarginalData):
+            self.D = np.mean(self._D.data, axis=1)
+        else:
+            self.D = self._D
 
     def draw_new_label(self, i):
         # This is essentially Neal (2000) equation (3.6)
@@ -89,8 +100,23 @@ class DPMM(object):
             data = self.D[np.nonzero(self.label == i)]
             self.phi[i] = self.prior.post(data).sample()
 
+    def update_latent_data(self):
+        # Update the latent "true" data in the case that the data is represented by a
+        # Pseudo-marginal samples or (TBD) means and Gaussian errors.
+        if isinstance(self._D, PseudoMarginalData):
+            for i, ph in enumerate(self.phi):
+                index = np.nonzero(self.label == i)
+                data = self._D[index]
+                ps = self.prior.like1(data.data, *ph)[..., 0] / data.interim_prior
+                ps /= np.sum(ps, axis=1)[:, np.newaxis]
+                for j, p in enumerate(ps):
+                    self.D[index[0][j]] = data.data[j, pick_discrete(p)]
+        else:
+            pass  # If data is already a numpy array, there's nothing to update.
+
     def update(self, n=1):
         # Neal (2000) algorithm 2.
         for j in xrange(n):
             self.update_c()
+            self.update_latent_data()
             self.update_phi()

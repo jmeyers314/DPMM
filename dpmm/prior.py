@@ -6,7 +6,6 @@ import numpy as np
 from scipy.special import gamma
 from utils import vTmv, gammad, random_invwish, pick_discrete
 from density import multivariate_t_density, t_density, normal_density, scaled_IX_density
-from data import PseudoMarginalData
 
 
 class Prior(object):
@@ -26,16 +25,9 @@ class Prior(object):
         """Return one or more samples from prior distribution."""
         raise NotImplementedError
 
-    def _like1(x, *args, **kwargs):
-        raise NotImplementedError
-
-    def like1(self, x, *args, **kwargs):
+    def like1(x, *args, **kwargs):
         """Return likelihood for single data element.  Pr(x | theta)"""
-        if isinstance(x, PseudoMarginalData):
-            return np.sum(self._like1(x.data, *args, **kwargs) /
-                          x.interim_prior[..., np.newaxis]) / x.nsample
-        else:
-            return self._like1(x, *args, **kwargs)
+        raise NotImplementedError
 
     def likelihood(self, D, *args, **kwargs):
         # It's quite likely overriding this will yield faster results...
@@ -47,34 +39,16 @@ class Prior(object):
         raise NotImplementedError
 
     def _post_params(self, D):
-        raise NotImplementedError
-
-    def post_params(self, D):
         """Returns new parameters for updating prior->posterior by initializing new object."""
-        if isinstance(D, PseudoMarginalData):
-            return self._post_params(D.random_sample())
-        else:
-            return self._post_params(D)
+        raise NotImplementedError
 
     def post(self, D):
         """Returns new Prior with updated params for prior->posterior."""
-        return self._post(*self.post_params(D))
-
-    def post_sample(self, D, *args, **kwargs):
-        if isinstance(D, PseudoMarginalData):
-            return self._post_sample(D, *args, **kwargs)
-        else:
-            return self.post(D).sample(*args, **kwargs)
-
-    def _pred(self, x):
-        raise NotImplementedError
+        return self._post(*self._post_params(D))
 
     def pred(self, x):
         """Prior predictive.  Pr(x | params)"""
-        if isinstance(x, PseudoMarginalData):
-            return np.sum(self._pred(x.data)/x.interim_prior[..., np.newaxis], axis=(1, 2))/x.nsample
-        else:
-            return self._pred(x)
+        raise NotImplementedError
 
 
 class NormInvWish(Prior):
@@ -117,7 +91,7 @@ class NormInvWish(Prior):
             return zip((np.random.multivariate_normal(self.mu_0, S/self.kappa_0) for S in Sig),
                        Sig)
 
-    def _like1(self, x, mu, Sig):
+    def like1(self, x, mu, Sig):
         """Returns likelihood Pr(x | mu, Sig), for a single data point."""
         norm = np.sqrt((2*np.pi)**self.d * np.linalg.det(Sig))
         return np.exp(-0.5*vTmv(x-mu, np.linalg.inv(Sig)).flat[0]) / norm
@@ -157,7 +131,7 @@ class NormInvWish(Prior):
                  self.kappa_0*n/kappa_n*vTmv(x.T))
         return mu_n, kappa_n, Lam_n, nu_n
 
-    def _pred(self, x):
+    def pred(self, x):
         """Prior predictive.  Pr(x)"""
         return multivariate_t_density(self.nu_0-self.d+1, self.mu_0,
                                       self.Lam_0*(self.kappa_0+1)/(self.kappa_0 - self.d + 1), x)
@@ -171,7 +145,7 @@ class NormInvWish(Prior):
             n, d = 1, shape[0]
         assert d == self.d
         # Eq (266)
-        mu_n, kappa_n, Lam_n, nu_n = self.post_params(D)
+        mu_n, kappa_n, Lam_n, nu_n = self._post_params(D)
         detLam0 = np.linalg.det(self.Lam_0)
         detLamn = np.linalg.det(Lam_n)
         num = gammad(d, nu_n/2.0) * detLam0**(self.nu_0/2.0)
@@ -193,8 +167,9 @@ class GaussianMeanKnownVariance(Prior):
 
     Fixed parameters
     ----------------
-    sigsqr : Known variance.  Treat as a prior parameter to make __init__() with with post_params(),
-             post(), post_pred(), etc., though note this never actually gets updated.
+    sigsqr : Known variance.  Treat as a prior parameter to make __init__() with with
+             _post_params(), post(), post_pred(), etc., though note this never actually gets
+             updated.
     """
     def __init__(self, mu_0, sigsqr_0, sigsqr):
         self.mu_0 = mu_0
@@ -211,7 +186,7 @@ class GaussianMeanKnownVariance(Prior):
         else:
             return np.random.normal(self.mu_0, np.sqrt(self.sigsqr_0), size=size)
 
-    def _like1(self, x, mu):
+    def like1(self, x, mu):
         """Returns likelihood Pr(x | mu), for a single data point.
         """
         return np.exp(-0.5*(x-mu)**2/self.sigsqr) / self._norm1
@@ -231,7 +206,7 @@ class GaussianMeanKnownVariance(Prior):
         mu_n = sigsqr_n * (self.mu_0/self.sigsqr_0 + n*Dbar/self.sigsqr)
         return mu_n, sigsqr_n, self.sigsqr
 
-    def _pred(self, x):
+    def pred(self, x):
         """Prior predictive.  Pr(x)"""
         sigsqr = self.sigsqr + self.sigsqr_0
         return np.exp(-0.5*(x-self.mu_0)**2/sigsqr) / np.sqrt(2*np.pi*sigsqr)
@@ -285,23 +260,7 @@ class NormInvChi2(Prior):
         else:
             return zip((np.random.normal(self.mu_0, np.sqrt(v/self.kappa_0)) for v in var), var)
 
-    def _post_sample(self, D, current_mu, current_var):
-        # D here is a PseudoMarginalData with NDIM=1.
-        # Trying a MH update, so need the current posterior and a proposal posterior
-        # For simplicity, also want the proposal transition probability to be symmetric.
-        std_sample_mean = np.std(np.mean(D.data[..., 0]/D.interim_prior[:, 0], axis=1))
-        proposed_mu = current_mu + np.random.normal(scale=std_sample_mean/np.sqrt(len(D)))
-        proposed_var = current_var + np.random.normal(scale=std_sample_mean/np.sqrt(2*len(D)))
-        current_pr = self.likelihood(D, (current_mu, current_var))*self(current_mu, proposed_mu)
-        proposed_pr = self.likelihood(D, (proposed_mu, proposed_var))*self(proposed_mu, proposed_var)
-        if proposed_pr > current_pr:
-            return (proposed_mu, proposed_var)
-        elif np.random.rand() < proposed_pr/current_pr:
-            return (proposed_mu, proposed_var)
-        else:
-            return current_mu, current_var
-
-    def _like1(self, x, mu, var):
+    def like1(self, x, mu, var):
         """Returns likelihood Pr(x | mu, var), for a single data point."""
         return np.exp(-0.5*(x-mu)**2/var) / np.sqrt(2*np.pi*var)
 
@@ -323,13 +282,13 @@ class NormInvChi2(Prior):
                     n*self.kappa_0/(self.kappa_0+n)*(self.mu_0-Dbar)**2)/nu_n)
         return mu_n, kappa_n, sigsqr_n, nu_n
 
-    def _pred(self, x):
+    def pred(self, x):
         """Prior predictive.  Pr(x)"""
         return t_density(self.nu_0, self.mu_0, (1.+self.kappa_0)*self.sigsqr_0/self.kappa_0, x)
 
     def evidence(self, D):
         """Fully marginalized likelihood Pr(D)"""
-        mu_n, kappa_n, sigsqr_n, nu_n = self.post_params(D)
+        mu_n, kappa_n, sigsqr_n, nu_n = self._post_params(D)
         try:
             n = len(D)
         except:
@@ -375,12 +334,9 @@ class NormInvGamma(Prior):
         else:
             return zip(np.random.normal(self.m_0, np.sqrt(self.V_0*var), size=size), var)
 
-    def _like1(self, x, mu, var):
+    def like1(self, x, mu, var):
         """Returns likelihood Pr(x | mu, var), for a single data point."""
-        if isinstance(x, PseudoMarginalData):
-            return np.sum(self.like1(x.data, mu, var)/x.interim_post) / x.nsample
-        else:
-            return np.exp(-0.5*(x-mu)**2/var) / np.sqrt(2*np.pi*var)
+        return np.exp(-0.5*(x-mu)**2/var) / np.sqrt(2*np.pi*var)
 
     def __call__(self, mu, var):
         """Returns Pr(mu, var), i.e., the prior density."""
@@ -389,34 +345,28 @@ class NormInvGamma(Prior):
         return normal*ig
 
     def _post_params(self, D):
-        if isinstance(D, PseudoMarginalData):
-            pass
-        else:
-            try:
-                n = len(D)
-            except TypeError:
-                n = 1
-            Dbar = np.mean(D)
-            invV_0 = 1./self.V_0
-            V_n = 1./(invV_0 + n)
-            m_n = V_n*(invV_0*self.m_0 + n*Dbar)
-            a_n = self.a_0 + n/2.0
-            # The commented line below is from Murphy.  It doesn't pass the unit tests so I derived
-            # my own formula which does.
-            # b_n = self.b_0 + 0.5*(self.m_0**2*invV_0 + np.sum(Dbar**2) - m_n**2/V_n)
-            b_n = self.b_0 + 0.5*(np.sum((D-Dbar)**2)+n/(1.0+n*self.V_0)*(self.m_0-Dbar)**2)
-            return m_n, V_n, a_n, b_n
+        try:
+            n = len(D)
+        except TypeError:
+            n = 1
+        Dbar = np.mean(D)
+        invV_0 = 1./self.V_0
+        V_n = 1./(invV_0 + n)
+        m_n = V_n*(invV_0*self.m_0 + n*Dbar)
+        a_n = self.a_0 + n/2.0
+        # The commented line below is from Murphy.  It doesn't pass the unit tests so I derived
+        # my own formula which does.
+        # b_n = self.b_0 + 0.5*(self.m_0**2*invV_0 + np.sum(Dbar**2) - m_n**2/V_n)
+        b_n = self.b_0 + 0.5*(np.sum((D-Dbar)**2)+n/(1.0+n*self.V_0)*(self.m_0-Dbar)**2)
+        return m_n, V_n, a_n, b_n
 
-    def _pred(self, x):
+    def pred(self, x):
         """Prior predictive.  Pr(x)"""
-        if isinstance(x, PseudoMarginalData):
-            return np.sum(self.pred(x.data)/x.interim_post) / x.nsample
-        else:
-            return t_density(2.0*self.a_0, self.m_0, self.b_0*(1.0+self.V_0)/self.a_0, x)
+        return t_density(2.0*self.a_0, self.m_0, self.b_0*(1.0+self.V_0)/self.a_0, x)
 
     def evidence(self, D):
         """Fully marginalized likelihood Pr(D)"""
-        m_n, V_n, a_n, b_n = self.post_params(D)
+        m_n, V_n, a_n, b_n = self._post_params(D)
         try:
             n = len(D)
         except:
@@ -452,7 +402,7 @@ class InvGamma(Prior):
     def sample(self, size=1):
         return 1./np.random.gamma(self.alpha, scale=self.beta, size=size)
 
-    def _like1(self, x, var):
+    def like1(self, x, var):
         """Returns likelihood Pr(x | var), for a single data point."""
         return np.exp(-0.5*(x-self.mu)**2/var) / np.sqrt(2*np.pi*var)
 
@@ -470,7 +420,7 @@ class InvGamma(Prior):
         be_n = 1./(1./self.beta + 0.5*np.sum((np.array(D)-self.mu)**2))
         return al_n, be_n, self.mu
 
-    def _pred(self, x):
+    def pred(self, x):
         """Prior predictive.  Pr(x)"""
         return t_density(2*self.alpha, self.mu, self.beta/self.alpha, x)
 
@@ -497,7 +447,7 @@ class InvWish(Prior):
     def sample(self, size=1):
         Sig = random_invwish(dof=self.nu, invS=self.Psi, size=size)
 
-    def _like1(self, x, Sig):
+    def like1(self, x, Sig):
         norm = np.sqrt((2*np.pi)**self.p * np.linalg.det(Sig))
         return np.exp(-0.5*vTmv(x-self.mu, np.linalg.inv(Sig)).flat[0]) / norm
 
@@ -522,5 +472,5 @@ class InvWish(Prior):
         Psi_n = self.Psi + vTmv((D-self.mu))
         return nu_n, Psi_n, self.mu
 
-    def _pred(self, x):
+    def pred(self, x):
         return multivariate_t_density(self.nu-self.p+1, self.mu, self.Psi/(self.nu-self.p+1), x)
