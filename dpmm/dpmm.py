@@ -46,7 +46,7 @@ class DPMM(object):
 
         # Initialize r_i array
         # This is Neal (2000) equation (3.4) without the b factor.
-        self.r_i = self.alpha * prior.pred(self.D)
+        self.r_i = self.alpha * self.prior.pred(self.D)
 
     def _initD(self):
         """Initialize latent data vector."""
@@ -111,6 +111,8 @@ class DPMM(object):
                 ps /= np.sum(ps, axis=1)[:, np.newaxis]
                 for j, p in enumerate(ps):
                     self.D[index[0][j]] = data.data[j, pick_discrete(p)]
+            # Need to update the r_i probabilities too since self.D changed.
+            self.r_i = self.alpha * self.prior.pred(self.D)
         else:
             pass  # If data is already a numpy array, there's nothing to update.
 
