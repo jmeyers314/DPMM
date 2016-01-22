@@ -134,8 +134,34 @@ def test_NormInvGamma():
     f.savefig("plots/NormInvGamma_var_samples.png")
 
 
+@timer
+def test_NormInvWish():
+    mu_0 = np.r_[0.1, 0.2]
+    kappa_0 = 1.1
+    Lam_0 = np.eye(2)+1.0
+    nu_0 = 4
+
+    model = dpmm.NormInvWish(mu_0, kappa_0, Lam_0, nu_0)
+
+    Nsample = 5000
+    samples = model.sample(size=Nsample)
+    mu_samples = [s[0] for s in samples]
+    cov_samples = [s[1] for s in samples]
+
+    mean = np.mean(mu_samples, axis=0)
+    std = np.std(mu_samples, axis=0)/np.sqrt(Nsample)
+    print "NormInvWish mu_0 = {}".format(mu_0)
+    print "NormInvWish E(mu) = {} +/- {}".format(mean, std)
+
+    print "NormInvWish Lam_0 = \n{}".format(np.linalg.inv(Lam_0))
+    mean_cov = np.mean(cov_samples, axis=0)/(nu_0-2-1)
+    std_cov = np.std(cov_samples, axis=0)/(nu_0-2-1)/np.sqrt(Nsample)
+    print "NormInvWish E(Sig) = \n{}\n +/-\n{}".format(mean_cov, std_cov)
+
+
 if __name__ == "__main__":
     test_GaussianMeanKnownVariance()
     test_InvGamma()
     test_NormInvChi2()
     test_NormInvGamma()
+    test_NormInvWish()
