@@ -1,5 +1,5 @@
 import numpy as np
-from utils import vTmv
+from utils import vTmv, pick_discrete
 
 
 class GaussND(object):
@@ -25,6 +25,9 @@ class GaussND(object):
         return (np.sqrt((2*np.pi)**self.k*np.linalg.det(self.Sig)) *
                 np.exp(-0.5*vTmv(x-self.mu, np.linalg.inv(self.Sig))))
 
+    def sample(self, size=None):
+        return np.random.multivariate_normal(mean=self.mu, cov=self.Sig, size=size)
+
 
 class GMM(object):
     def __init__(self, components, proportions):
@@ -37,3 +40,16 @@ class GMM(object):
 
     def __call__(self, x):
         return np.sum(c(x)*p for c, p in zip(self.components, self.proportions))
+
+    def sample(self, size=None):
+        if size is None:
+            c = pick_discrete(self.proportions)
+            return self.components[c].sample()
+        else:
+            out = np.empty((size,), dtype=float)
+            nums = np.random.multinomial(size, self.proportions)
+            i = 0
+            for component, num in zip(self.components, nums):
+                out[i:i+num] = component.sample(size=num)
+                i += num
+            return out
