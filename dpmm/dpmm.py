@@ -2,24 +2,29 @@ import itertools
 
 import numpy as np
 from utils import pick_discrete
-from data import PseudoMarginalData
+from data import PseudoMarginalData, NullManip
 
 
 class DPMM(object):
     """Dirichlet Process Mixture Model.  Using algorithm 2 from Neal (2000).
 
-    @param prior    The prior object for whatever model is being inferred.
-    @param alpha    Concentration parameter.
-    @param D        Data.
-    @param phi      Optional initial state for each cluster.
-    @param label    Optional initial cluster labels for each data point.
+    @param prior   The prior object for whatever model is being inferred.
+    @param alpha   DP concentration parameter.
+    @param D       Data.
+    @param manip   A data manipulator.  Used for unshearing, for example.
+    @param phi     Optional initial state for each cluster.
+    @param label   Optional initial cluster labels for each data point.
     """
-    def __init__(self, prior, alpha, D, phi=None, label=None):
+    def __init__(self, prior, alpha, D, manip=None, phi=None, label=None):
         self.prior = prior
         self.alpha = alpha
         self._D = D  # data
+        if manip is None:
+            manip = NullManip()
+        self.manip = manip
 
         self._initD()
+        self.manip.init(self.D)
 
         self.n = len(self.D)
 
@@ -31,7 +36,7 @@ class DPMM(object):
             #    samples different numbers of components.
             # 3) Finally, each element of phi should be a tuple so that we can call
             #    prior.like1(x, *phi).
-            phi = [self.prior.post(self.D).sample()]
+            phi = [self.prior.post(self.mD).sample()]
             nphi = [self.n]  # Number of data points assigned to each tuple.
             label = np.zeros((self.n), dtype=int)  # cluster assignment for each data point.
         if nphi is None:
@@ -43,7 +48,11 @@ class DPMM(object):
 
         # Initialize r_i array
         # This is Neal (2000) equation (3.4) without the b factor.
-        self.r_i = self.alpha * self.prior.pred(self.D)
+        self.r_i = self.alpha * self.prior.pred(self.mD)
+
+    @property
+    def mD(self):
+        return self.manip(self.D)
 
     def _initD(self):
         """Initialize latent data vector."""
@@ -55,7 +64,7 @@ class DPMM(object):
     def draw_new_label(self, i):
         # This is essentially Neal (2000) equation (3.6)
         # Start off with the probabilities for cloning an existing cluster:
-        p = [self.prior.like1(self.D[i], *phi)*nphi
+        p = [self.prior.like1(self.mD[i], *phi)*nphi
              for phi, nphi in itertools.izip(self.phi, self.nphi)]
         # and then append the probability to create a new cluster.
         p.append(self.r_i[i])
@@ -85,7 +94,7 @@ class DPMM(object):
             self.label[i] = new_label
             # If we selected to create a new cluster, then draw parameters for that cluster.
             if new_label == len(self.phi):
-                self.phi.append(self.prior.post(self.D[i]).sample())
+                self.phi.append(self.prior.post(self.mD[i]).sample())
                 self.nphi.append(1)
             else:  # Otherwise just increment the count for the cloned cluster.
                 self.nphi[new_label] += 1
@@ -94,7 +103,7 @@ class DPMM(object):
         # This is the second bullet for Neal (2000) algorithm 2, updating the parameters phi of each
         # cluster conditional on that clusters currently associated data members.
         for i in xrange(len(self.phi)):
-            data = self.D[np.nonzero(self.label == i)]
+            data = self.mD[np.nonzero(self.label == i)]
             self.phi[i] = self.prior.post(data).sample()
 
     def update_latent_data(self):
@@ -103,13 +112,14 @@ class DPMM(object):
         if isinstance(self._D, PseudoMarginalData):
             for i, ph in enumerate(self.phi):
                 index = np.nonzero(self.label == i)
-                data = self._D[index]
-                ps = self.prior.like1(data.data, *ph)[..., 0] / data.interim_prior
+                data = self._D[index]  # a PseudoMarginalData instance
+                # calculate weights for selecting a representative sample
+                ps = self.prior.like1(self.manip(data.data), *ph)[..., 0] / data.interim_prior
                 ps /= np.sum(ps, axis=1)[:, np.newaxis]
                 for j, p in enumerate(ps):
                     self.D[index[0][j]] = data.data[j, pick_discrete(p)]
             # Need to update the r_i probabilities too since self.D changed.
-            self.r_i = self.alpha * self.prior.pred(self.D)
+            self.r_i = self.alpha * self.prior.pred(self.mD)
         else:
             pass  # If data is already a numpy array, there's nothing to update.
 
@@ -119,3 +129,5 @@ class DPMM(object):
             self.update_c()
             self.update_latent_data()
             self.update_phi()
+            # Give manip.update() the *unmanipulated* data.
+            self.manip.update(self.D, self.phi, self.label)
