@@ -1,6 +1,3 @@
-""" Going to try algorithm 1 from Neal (2000)
-"""
-
 import itertools
 
 import numpy as np
