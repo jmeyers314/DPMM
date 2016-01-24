@@ -10,10 +10,23 @@ from density import multivariate_t_density, t_density, normal_density, scaled_IX
 
 class Prior(object):
     """
-    theta = parameters of the model.
-    x = data point.
-    D = {x} = all data.
-    params = parameters of the prior.
+    In general, `Prior` object models represent the proabilistic graphical model:
+      psi -> theta -> [x]
+    where psi are hyperparameters of a prior,
+    theta are parameters of the model being constrained,
+    and [x] are data.
+
+    For example, for an InvGamma model, the data (x) are scalar samples, the model is to infer the
+    variance (theta) of a generative Gaussian distribution with known mean, and alpha, beta (psi)
+    are hyperparameters for the prior on the Gaussian variance.
+
+    We define the following probability distributions for each `Prior` object:
+
+    Likelihood:  Pr([x] | theta).  Note [x] is conditionally independent of psi given theta.
+    Prior: Pr(theta | psi).
+    Posterior: Pr(theta | x, psi)  By Bayes theorem, equal to:
+               Pr(x | theta) Pr(theta | psi) / Pr (x | psi)
+    Predictive (or evidence): Pr(x | psi) = \int Pr(x | theta) Pr(theta | psi) d(theta).
     """
     def __init__(self, post=None, *args, **kwargs):
         # Assume conjugate prior by default, i.e. that posterior is same form as prior
@@ -423,6 +436,46 @@ class InvGamma(Prior):
     def pred(self, x):
         """Prior predictive.  Pr(x)"""
         return t_density(2*self.alpha, self.mu, self.beta/self.alpha, x)
+
+    def evidence(self, D):
+        """Fully marginalized likelihood Pr(D)"""
+        raise NotImplementedError
+
+
+class InvGamma2D(Prior):
+    """Inverse Gamma distribution, but for modeling 2D covariance matrices proportional to the
+    identity matrix."""
+    def __init__(self, alpha, beta, mu):
+        self.alpha = alpha
+        self.beta = beta
+        self.mu = mu
+        super(InvGamma2D, self).__init__()
+
+    def sample(self, size=1):
+        return 1./np.random.gamma(self.alpha, scale=self.beta, size=size)
+
+    def like1(self, x, var):
+        """Returns likelihood Pr(x | var), for a single data point."""
+        return np.exp(-0.5*np.sum((x-self.mu)**2, axis=0)/var) / (2*np.pi*var)
+
+    def __call__(self, var):
+        """Returns Pr(var), i.e., the prior density."""
+        al, be = self.alpha, self.beta
+        return be**(-al)/gamma(al) * var**(-1.-al) * np.exp(-1./(be*var))
+
+    def _post_params(self, D):
+        try:
+            n = len(D)
+        except TypeError:
+            n = 1
+        al_n = self.alpha + n  # it's + n/2.0 in InvGamma, but in 2D it's + n.
+        be_n = 1./(1./self.beta + 0.5*np.sum((np.array(D)-self.mu)**2))  # Same formula for beta.
+        return al_n, be_n, self.mu
+
+    def pred(self, x):
+        """Prior predictive.  Pr(x)"""
+        # Is this a multivariate t?  Definitely a nearly blind guess here.
+        return multivariate_t_density(2*self.alpha, self.mu, self.beta/self.alpha*np.eye(2), x)
 
     def evidence(self, D):
         """Fully marginalized likelihood Pr(D)"""
