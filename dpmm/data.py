@@ -48,7 +48,7 @@ class NullManip(object):
     def unmanip(self, D):
         return D
 
-    def update(self, D, phi, c):
+    def update(self, D, phi, c, prior):
         pass
 
 
@@ -66,7 +66,7 @@ class Linear1DShear(object):
     def unmanip(self, D):
         return D + self.g
 
-    def update(self, D, phi, label):
+    def update(self, D, phi, label, prior):
         """Update the estimate of the shear g.
         D here is the *unmanipulated* data.
         Assume that phi represents variance of a Gaussian distribution (can we make this more
