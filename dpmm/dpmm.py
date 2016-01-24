@@ -28,27 +28,23 @@ class DPMM(object):
 
         self.n = len(self.D)
 
-        if phi is None:
-            # A few points:
-            # 1) It's easier to create new clusters than to destroy existing clusters, so start off
-            #    with all data points in a single cluster.
-            # 2) Store cluster params in a list so that it's easy to expand/contract as the sampler
-            #    samples different numbers of components.
-            # 3) Finally, each element of phi should be a tuple so that we can call
-            #    prior.like1(x, *phi).
-            phi = [self.prior.post(self.mD).sample()]
-            nphi = [self.n]  # Number of data points assigned to each tuple.
-            label = np.zeros((self.n), dtype=int)  # cluster assignment for each data point.
-        if nphi is None:
-            nphi = [np.sum(label == i) for i in xrange(label.max())]
-
-        self.phi = phi
-        self.nphi = nphi
-        self.label = label
-
         # Initialize r_i array
         # This is Neal (2000) equation (3.4) without the b factor.
         self.r_i = self.alpha * self.prior.pred(self.mD)
+
+        if phi is None:
+            self.init_phi()
+        else:
+            self.phi = phi
+            self.label = label
+            self.nphi = [np.sum(label == i) for i in xrange(label.max())]
+
+    def init_phi(self):
+        self.label = np.zeros((self.n), dtype=int)
+        self.phi = []
+        self.nphi = []
+        for i in xrange(self.n):
+            self.update_c_i(i)
 
     @property
     def mD(self):
@@ -79,29 +75,37 @@ class DPMM(object):
         picked = pick_discrete(p)
         return picked
 
+    def del_c_i(self, i):
+        # De-associate the ith data point from its cluster.
+        label = self.label[i]
+        # We're about to assign this point to a new cluster, so decrement current cluster count.
+        self.nphi[label] -= 1
+        # If we just deleted the last cluster member, then delete the cluster from self.phi
+        if self.nphi[label] == 0:
+            del self.phi[label]
+            del self.nphi[label]
+            # Need to decrement label numbers for labels greater than the one deleted...
+            self.label[np.nonzero(self.label >= label)] -= 1
+
+    def update_c_i(self, i):
+        # for deduplication
+        # Neal (2000) equation 3.6.  See draw_new_label above.
+        new_label = self.draw_new_label(i)
+        self.label[i] = new_label
+        # If we selected to create a new cluster, then draw parameters for that cluster.
+        if new_label == len(self.phi):
+            self.phi.append(self.prior.post(self.mD[i]).sample())
+            self.nphi.append(1)
+        else:  # Otherwise just increment the count for the cloned cluster.
+            self.nphi[new_label] += 1
+
     def update_c(self):
         # This is the first bullet for Neal (2000) algorithm 2, updating the labels for each data
         # point and potentially deleting clusters that are no longer populated or creating new
         # clusters with probability proportional to self.alpha.
         for i in xrange(self.n):
-            label = self.label[i]
-            # We're about to assign this point to a new cluster, so decrement current cluster count.
-            self.nphi[label] -= 1
-            # If we just deleted the last cluster member, then delete the cluster from self.phi
-            if self.nphi[label] == 0:
-                del self.phi[label]
-                del self.nphi[label]
-                # Need to decrement label numbers for labels greater than the one deleted...
-                self.label[np.nonzero(self.label >= label)] -= 1
-            # Neal (2000) equation 3.6.  See function above.
-            new_label = self.draw_new_label(i)
-            self.label[i] = new_label
-            # If we selected to create a new cluster, then draw parameters for that cluster.
-            if new_label == len(self.phi):
-                self.phi.append(self.prior.post(self.mD[i]).sample())
-                self.nphi.append(1)
-            else:  # Otherwise just increment the count for the cloned cluster.
-                self.nphi[new_label] += 1
+            self.del_c_i(i)
+            self.update_c_i(i)
 
     def update_phi(self):
         # This is the second bullet for Neal (2000) algorithm 2, updating the parameters phi of each
