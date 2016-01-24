@@ -50,34 +50,3 @@ class NullManip(object):
 
     def update(self, D, phi, c):
         pass
-
-
-class Linear1DShear(object):
-    def __init__(self, g):
-        self.g = g
-
-    def init(self, D):
-        self.g = np.mean(D)
-
-    def __call__(self, D):
-        """Return the manipulated data, i.e., the current estimate for the unsheared ellipticity."""
-        return D - self.g
-
-    def unmanip(self, D):
-        return D + self.g
-
-    def update(self, D, phi, label):
-        """Update the estimate of the shear g.
-        D here is the *unmanipulated* data.
-        Assume that phi represents variance of a Gaussian distribution (can we make this more
-        generic?)
-        """
-        Lam = 0.0
-        eta = 0.0
-        for i, ph in enumerate(phi):
-            index = np.nonzero(label == i)
-            Lam += len(index[0])/ph
-            eta += np.sum(D[index]/ph)
-        var = 1./Lam
-        mu = eta*var
-        self.g = np.random.normal(loc=mu, scale=np.sqrt(var))

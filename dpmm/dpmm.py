@@ -130,4 +130,4 @@ class DPMM(object):
             self.update_latent_data()
             self.update_phi()
             # Give manip.update() the *unmanipulated* data.
-            self.manip.update(self.D, self.phi, self.label)
+            self.manip.update(self.D, self.phi, self.label, self.prior)

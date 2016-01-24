@@ -4,4 +4,5 @@
 #  DPMM first
 from .dpmm import DPMM
 from .prior import NormInvWish, GaussianMeanKnownVariance, NormInvChi2, NormInvGamma, InvGamma
-from .data import PseudoMarginalData, Linear1DShear
+from .data import PseudoMarginalData
+from .shear import Linear1DShear, Shear, WeakShear
