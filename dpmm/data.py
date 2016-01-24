@@ -48,5 +48,5 @@ class NullManip(object):
     def unmanip(self, D):
         return D
 
-    def update(self, D, phi, c):
+    def update(self, D, phi, c, prior):
         pass
