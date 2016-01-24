@@ -52,7 +52,10 @@ class DPMM(object):
 
     @property
     def mD(self):
-        return self.manip(self.D)
+        if self.manip_needs_update:
+            self._mD = self.manip(self.D)
+            self.manip_needs_update = False
+        return self._mD
 
     def _initD(self):
         """Initialize latent data vector."""
@@ -60,6 +63,7 @@ class DPMM(object):
             self.D = np.mean(self._D.data, axis=1)
         else:
             self.D = self._D
+        self.manip_needs_update = True
 
     def draw_new_label(self, i):
         # This is essentially Neal (2000) equation (3.6)
@@ -120,6 +124,7 @@ class DPMM(object):
                     self.D[index[0][j]] = data.data[j, pick_discrete(p)]
             # Need to update the r_i probabilities too since self.D changed.
             self.r_i = self.alpha * self.prior.pred(self.mD)
+            self.manip_needs_update = True
         else:
             pass  # If data is already a numpy array, there's nothing to update.
 
@@ -131,3 +136,4 @@ class DPMM(object):
             self.update_phi()
             # Give manip.update() the *unmanipulated* data.
             self.manip.update(self.D, self.phi, self.label, self.prior)
+            self.manip_needs_update = True
