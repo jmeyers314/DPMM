@@ -47,6 +47,9 @@ class Prior(object):
         """Returns Pr(D | theta)."""
         return reduce(mul, (self.like1(x, *args, **kwargs) for x in D), 1.0)
 
+    def lnlikelihood(self, D, *args, **kwargs):
+        return np.log(self.likelihood(D, *args, **kwargs))
+
     def __call__(self, *args):
         """Returns Pr(theta), i.e. the prior probability."""
         raise NotImplementedError
@@ -457,6 +460,10 @@ class InvGamma2D(Prior):
     def like1(self, x, var):
         """Returns likelihood Pr(x | var), for a single data point."""
         return np.exp(-0.5*np.sum((x-self.mu)**2, axis=0)/var) / (2*np.pi*var)
+
+    def lnlikelihood(self, D, var):
+        """Returns the log likelihood for data D"""
+        return -0.5*np.sum((D-self.mu)**2)/var - D.shape[0]*np.log(2*np.pi*var)
 
     def __call__(self, var):
         """Returns Pr(var), i.e., the prior density."""

@@ -147,7 +147,10 @@ class Shear(object):
         """
         # Pr(g | D, phi, label) is complicated, so we need to MH update it.
         # For a proposal, though, we can still use the weak shear limit.
-        prop_g = draw_g_1d_weak_shear(D, phi, label)
+        # Whoops!  The weak shear limit proposal doesn't lead to *any* acceptances when ngal is
+        # large.  Need to try something more clever.
+        # prop_g = draw_g_2d_weak_shear(D, phi, label)
+        prop_g = np.random.multivariate_normal(mean=self.g, cov=np.eye(2)*0.0005**2)
 
         current_e_int = unshear(D, self.g)
         prop_e_int = unshear(D, prop_g)
@@ -155,11 +158,11 @@ class Shear(object):
         prop_lnlike = 0.0
         for i, ph in enumerate(phi):
             index = np.nonzero(label == i)
-            current_lnlike += np.log(prior.likelihood(current_e_int[index], *ph))
-            prop_lnlike += np.log(prior.likelihood(prop_e_int[index], *ph))
+            current_lnlike += prior.lnlikelihood(current_e_int[index], *ph)
+            prop_lnlike += prior.lnlikelihood(prop_e_int[index], *ph)
         if prop_lnlike > current_lnlike:
             self.g = prop_g
         else:
             u = np.random.uniform()
-            if u < np.exp(prop_lnlike/current_lnlike):
+            if u < np.exp(prop_lnlike - current_lnlike):
                 self.g = prop_g
