@@ -4,7 +4,7 @@
 from operator import mul
 import numpy as np
 from scipy.special import gamma
-from utils import vTmv, gammad, random_invwish, pick_discrete
+from utils import vTmv, gammad, random_invwish
 from density import multivariate_t_density, t_density, normal_density, scaled_IX_density
 
 
@@ -38,9 +38,14 @@ class Prior(object):
         """Return one or more samples from prior distribution."""
         raise NotImplementedError
 
-    def like1(x, *args, **kwargs):
+    def like1(self, x, *args, **kwargs):
         """Return likelihood for single data element.  Pr(x | theta)"""
         raise NotImplementedError
+
+    def like1N(self, x, args):
+        """Return likelihood for single data element, but broadcast over multiple theta."""
+        # return np.fromiter((self.like1(x, *a) for a in args), np.float, len(args))
+        return np.array([self.like1(x, *a) for a in args])
 
     def likelihood(self, D, *args, **kwargs):
         # It's quite likely overriding this will yield faster results...
@@ -460,6 +465,13 @@ class InvGamma2D(Prior):
     def like1(self, x, var):
         """Returns likelihood Pr(x | var), for a single data point."""
         return np.exp(-0.5*np.sum((x-self.mu)**2, axis=0)/var) / (2*np.pi*var)
+
+    def like1N(self, x, _vars):
+        """Return likelihoods Pr(x | var) for a single data point, but multiple vars."""
+        if len(_vars) == 0:
+            return np.array([])
+        _vars = np.concatenate(_vars)
+        return np.exp(-0.5*np.sum((x-self.mu)**2, axis=0)/_vars) / (2*np.pi*_vars)
 
     def lnlikelihood(self, D, var):
         """Returns the log likelihood for data D"""

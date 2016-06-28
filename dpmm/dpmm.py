@@ -64,8 +64,9 @@ class DPMM(object):
     def draw_new_label(self, i):
         # This is essentially Neal (2000) equation (3.6)
         # Start off with the probabilities for cloning an existing cluster:
-        p = [self.prior.like1(self.mD[i], *phi)*nphi
-             for phi, nphi in itertools.izip(self.phi, self.nphi)]
+        p = [l1 * nphi
+             for l1, nphi in itertools.izip(self.prior.like1N(self.mD[i], self.phi),
+                                            self.nphi)]
         # and then append the probability to create a new cluster.
         p.append(self.r_i[i])
         p = np.array(p)
