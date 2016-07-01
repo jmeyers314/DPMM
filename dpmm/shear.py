@@ -126,6 +126,8 @@ class Shear(object):
         # g should be a length-2 array representing the real and imag parts of the complex
         # representation of the reduced shear.
         self.g = g
+        self.Nproposals = 0
+        self.Nacceptances = 0
 
     def init(self, D):
         """A quick and dirty estimate of g is just the average over D."""
@@ -162,7 +164,10 @@ class Shear(object):
             prop_lnlike += prior.lnlikelihood(prop_e_int[index], *ph)
         if prop_lnlike > current_lnlike:
             self.g = prop_g
+            self.Nacceptances += 1
         else:
             u = np.random.uniform()
             if u < np.exp(prop_lnlike - current_lnlike):
                 self.g = prop_g
+                self.Nacceptances += 1
+        self.Nproposals += 1

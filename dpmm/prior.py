@@ -464,7 +464,10 @@ class InvGamma2D(Prior):
 
     def like1(self, x, var):
         """Returns likelihood Pr(x | var), for a single data point."""
-        return np.exp(-0.5*np.sum((x-self.mu)**2, axis=0)/var) / (2*np.pi*var)
+        old_settings = np.geterr()
+        np.seterr(overflow='ignore')
+        return np.exp(-0.5*np.sum((x-self.mu)**2, axis=-1)/var) / (2*np.pi*var)
+        np.seterr(**old_settings)
 
     def like1N(self, x, _vars):
         """Return likelihoods Pr(x | var) for a single data point, but multiple vars."""
