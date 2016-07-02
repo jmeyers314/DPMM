@@ -152,7 +152,7 @@ class Shear(object):
         # Whoops!  The weak shear limit proposal doesn't lead to *any* acceptances when ngal is
         # large.  Need to try something more clever.
         # prop_g = draw_g_2d_weak_shear(D, phi, label)
-        prop_g = np.random.multivariate_normal(mean=self.g, cov=np.eye(2)*0.0005**2)
+        prop_g = np.random.multivariate_normal(mean=self.g, cov=np.eye(2)*0.003**2)
 
         current_e_int = unshear(D, self.g)
         prop_e_int = unshear(D, prop_g)
