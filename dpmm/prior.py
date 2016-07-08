@@ -413,14 +413,14 @@ class NormInvGamma(Prior):
 
 
 class InvGamma(Prior):
-    """Inverse Gamma distribution.  Note this parameterization matches Murphy's, not wikipedia's.s"""
+    """Inverse Gamma distribution.  Note this parameterization matches Murphy's, not wikipedia's."""
     def __init__(self, alpha, beta, mu):
         self.alpha = alpha
         self.beta = beta
         self.mu = mu
         super(InvGamma, self).__init__()
 
-    def sample(self, size=1):
+    def sample(self, size=None):
         return 1./np.random.gamma(self.alpha, scale=self.beta, size=size)
 
     def like1(self, x, var):
