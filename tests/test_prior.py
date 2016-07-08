@@ -407,54 +407,54 @@ def test_InvGamma():
                                        "InvGamma has wrong variance.")
 
 
-@timer
-def test_InvWish(full=False):
-    nu = 3
-    Psi = np.eye(2)+0.1
-    mu = np.r_[0.1, 0.2]
-    iw = dpmm.InvWish(nu, Psi, mu)
-    iw.sample()
-    iw.sample(10)
-
-    # Check prior predictive density
-    r = dblquad(lambda x, y: iw.pred([x, y]), -np.inf, np.inf, lambda x: -np.inf, lambda x: np.inf)
-    np.testing.assert_almost_equal(r[0], 1.0, 5,
-                                   "InvWish prior predictive density does not integrate to 1.0")
-
-    # Check posterior predictive density
-    D = np.array([[0.1, 0.2], [0.2, 0.3], [0.1, 0.2], [0.4, 0.3]])
-    r = dblquad(lambda x, y: iw.post(D).pred([x, y]), -np.inf, np.inf,
-                lambda x: -np.inf, lambda x: np.inf)
-    np.testing.assert_almost_equal(r[0], 1.0, 5,
-                                   "InvWish posterior predictive density does not integrate to 1.0")
-
-    # Check that the likelihood of a single point in 2 dimensions integrates to 1.
-    r = dblquad(lambda x, y: iw.like1([x, y], Sig=np.eye(2)+0.12),
-                -np.inf, np.inf, lambda x: -np.inf, lambda x: np.inf)
-    np.testing.assert_almost_equal(r[0], 1.0, 10,
-                                   "InvWish likelihood does not integrate to 1.0")
-
-    if __name__ == "__main__" and full:
-        # Check that likelihood of a single point in 3 dimensions integrates to 1.
-        iw2 = dpmm.InvWish(3, np.eye(3), [1]*3)
-        r = tplquad(lambda x, y, z: iw2.like1([x, y, z], np.eye(3)+0.1),
-                    -np.inf, np.inf,
-                    lambda x: -np.inf, lambda x: np.inf,
-                    lambda x, y: -np.inf, lambda x, y: np.inf)
-        np.testing.assert_almost_equal(r[0], 1.0, 8,
-                                       "InvWish likelihood does not integrate to 1.0")
-
-    # Check that posterior is proportional to prior * likelihood
-    # Add some more data points
-    D = np.array([[0.1, 0.2], [0.2, 0.3], [0.1, 0.2], [0.4, 0.3],
-                  [2.2, 1.1], [2.3, 1.1], [2.5, 2.3]])
-    Sigs = [np.eye(2)*1.5, np.eye(2)*0.7, np.array([[1.1, -0.1], [-0.1, 1.2]])]
-    posts = [iw.post(D)(Sig) for Sig in Sigs]
-    posts2 = [iw(Sig)*iw.likelihood(D, Sig) for Sig in Sigs]
-
-    np.testing.assert_array_almost_equal(
-        posts/posts[0], posts2/posts2[0], 5,
-        "InvWish posterior not proportional to prior * likelihood.")
+# @timer
+# def test_InvWish(full=False):
+#     nu = 3
+#     Psi = np.eye(2)+0.1
+#     mu = np.r_[0.1, 0.2]
+#     iw = dpmm.InvWish(nu, Psi, mu)
+#     iw.sample()
+#     iw.sample(10)
+#
+#     # Check prior predictive density
+#     r = dblquad(lambda x, y: iw.pred([x, y]), -np.inf, np.inf, lambda x: -np.inf, lambda x: np.inf)
+#     np.testing.assert_almost_equal(r[0], 1.0, 5,
+#                                    "InvWish prior predictive density does not integrate to 1.0")
+#
+#     # Check posterior predictive density
+#     D = np.array([[0.1, 0.2], [0.2, 0.3], [0.1, 0.2], [0.4, 0.3]])
+#     r = dblquad(lambda x, y: iw.post(D).pred([x, y]), -np.inf, np.inf,
+#                 lambda x: -np.inf, lambda x: np.inf)
+#     np.testing.assert_almost_equal(r[0], 1.0, 5,
+#                                    "InvWish posterior predictive density does not integrate to 1.0")
+#
+#     # Check that the likelihood of a single point in 2 dimensions integrates to 1.
+#     r = dblquad(lambda x, y: iw.like1([x, y], Sig=np.eye(2)+0.12),
+#                 -np.inf, np.inf, lambda x: -np.inf, lambda x: np.inf)
+#     np.testing.assert_almost_equal(r[0], 1.0, 10,
+#                                    "InvWish likelihood does not integrate to 1.0")
+#
+#     if __name__ == "__main__" and full:
+#         # Check that likelihood of a single point in 3 dimensions integrates to 1.
+#         iw2 = dpmm.InvWish(3, np.eye(3), [1]*3)
+#         r = tplquad(lambda x, y, z: iw2.like1([x, y, z], np.eye(3)+0.1),
+#                     -np.inf, np.inf,
+#                     lambda x: -np.inf, lambda x: np.inf,
+#                     lambda x, y: -np.inf, lambda x, y: np.inf)
+#         np.testing.assert_almost_equal(r[0], 1.0, 8,
+#                                        "InvWish likelihood does not integrate to 1.0")
+#
+#     # Check that posterior is proportional to prior * likelihood
+#     # Add some more data points
+#     D = np.array([[0.1, 0.2], [0.2, 0.3], [0.1, 0.2], [0.4, 0.3],
+#                   [2.2, 1.1], [2.3, 1.1], [2.5, 2.3]])
+#     Sigs = [np.eye(2)*1.5, np.eye(2)*0.7, np.array([[1.1, -0.1], [-0.1, 1.2]])]
+#     posts = [iw.post(D)(Sig) for Sig in Sigs]
+#     posts2 = [iw(Sig)*iw.likelihood(D, Sig) for Sig in Sigs]
+#
+#     np.testing.assert_array_almost_equal(
+#         posts/posts[0], posts2/posts2[0], 5,
+#         "InvWish posterior not proportional to prior * likelihood.")
 
 
 if __name__ == "__main__":
