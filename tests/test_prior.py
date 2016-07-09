@@ -469,4 +469,4 @@ if __name__ == "__main__":
     test_NormInvChi2()
     test_NormInvGamma()
     test_InvGamma()
-    test_InvWish(args.full)
+    # test_InvWish(args.full)
