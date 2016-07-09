@@ -273,20 +273,40 @@ class NormInvChi2(Prior):
         self.nu_0 = float(nu_0)
         super(NormInvChi2, self).__init__()
 
-    def sample(self, size=1):
-        # sanity check this.
-        var = 1./np.random.chisquare(df=self.nu_0, size=size)*self.nu_0*self.sigsqr_0
-        if size == 1:
-            return np.random.normal(self.mu_0, np.sqrt(var/self.kappa_0)), var
-        else:
-            return zip((np.random.normal(self.mu_0, np.sqrt(v/self.kappa_0)) for v in var), var)
+    model_dtype = np.dtype([('mu', float), ('var', float)])
 
-    def like1(self, x, mu, var):
+    def sample(self, size=None):
+        if size is None:
+            var = 1./np.random.chisquare(df=self.nu_0)*self.nu_0*self.sigsqr_0
+            ret = np.zeros(1, dtype=self.model_dtype)
+            ret['mu'] = np.random.normal(self.mu_0, np.sqrt(var/self.kappa_0))
+            ret['var'] = var
+            return ret[0]
+        else:
+            var = 1./np.random.chisquare(df=self.nu_0, size=size)*self.nu_0*self.sigsqr_0
+            ret = np.zeros(size, dtype=self.model_dtype)
+            ret['mu'] = (np.random.normal(self.mu_0, np.sqrt(1./self.kappa_0), size=size)
+                         * np.sqrt(var))
+            ret['var'] = var
+            return ret
+
+    def like1(self, *args):
         """Returns likelihood Pr(x | mu, var), for a single data point."""
+        if len(args) == 3:
+            x, mu, var = args
+        elif len(args) == 2:
+            x, theta = args
+            mu = theta['mu']
+            var = theta['var']
         return np.exp(-0.5*(x-mu)**2/var) / np.sqrt(2*np.pi*var)
 
-    def __call__(self, mu, var):
+    def __call__(self, *args):
         """Returns Pr(mu, var), i.e., the prior density."""
+        if len(args) == 2:
+            mu, var = args
+        elif len(args) == 1:
+            mu = args['mu']
+            var = args['var']
         return (normal_density(self.mu_0, var/self.kappa_0, mu) *
                 scaled_IX_density(self.nu_0, self.sigsqr_0, var))
 
