@@ -65,9 +65,10 @@ class DPMM(object):
         # This is essentially Neal (2000) equation (3.6)
         # Start off with the probabilities for cloning an existing cluster:
         p = [l1 * nphi
-             for l1, nphi in itertools.izip(self.prior.like1N(self.mD[i], self.phi),
+             for l1, nphi in itertools.izip(self.prior.like1(self.mD[i], self.phi),
                                             self.nphi)]
-        # and then append the probability to create a new cluster.
+        # in the above, we're broadcasting over multiple phi values to get multiple probs.
+        # Next, append the probability to create a new cluster.
         p.append(self.r_i[i])
         p = np.array(p)
         # Normalize.  This essentially takes care of the factors of b/(n-1+alpha) in Neal (2000)

@@ -42,11 +42,6 @@ class Prior(object):
         """Return likelihood for single data element.  Pr(x | theta)"""
         raise NotImplementedError
 
-    def like1N(self, x, args):
-        """Return likelihood for single data element, but broadcast over multiple theta."""
-        # return np.fromiter((self.like1(x, *a) for a in args), np.float, len(args))
-        return np.array([self.like1(x, *a) for a in args])
-
     def likelihood(self, D, *args, **kwargs):
         # It's quite likely overriding this will yield faster results...
         """Returns Pr(D | theta)."""
@@ -496,22 +491,18 @@ class InvGamma2D(Prior):
     def __init__(self, alpha, beta, mu):
         self.alpha = alpha
         self.beta = beta
-        self.mu = mu
+        self.mu = np.array(mu)
+        assert len(mu) == 2
         super(InvGamma2D, self).__init__()
 
-    def sample(self, size=1):
+    def sample(self, size=None):
         return 1./np.random.gamma(self.alpha, scale=self.beta, size=size)
 
     def like1(self, x, var):
         """Returns likelihood Pr(x | var), for a single data point."""
-        return np.exp(-0.5*np.sum((x-self.mu)**2, axis=0)/var) / (2*np.pi*var)
-
-    def like1N(self, x, _vars):
-        """Return likelihoods Pr(x | var) for a single data point, but multiple vars."""
-        if len(_vars) == 0:
-            return np.array([])
-        _vars = np.concatenate(_vars)
-        return np.exp(-0.5*np.sum((x-self.mu)**2, axis=0)/_vars) / (2*np.pi*_vars)
+        assert isinstance(x, np.ndarray)
+        assert x.shape[-1] == 2
+        return np.exp(-0.5*np.sum((x-self.mu)**2, axis=-1)/var) / (2*np.pi*var)
 
     def lnlikelihood(self, D, var):
         """Returns the log likelihood for data D"""
@@ -533,6 +524,8 @@ class InvGamma2D(Prior):
 
     def pred(self, x):
         """Prior predictive.  Pr(x)"""
+        assert isinstance(x, np.ndarray)
+        assert x.shape[-1] == 2
         # Is this a multivariate t?  Definitely a nearly blind guess here.
         return multivariate_t_density(2*self.alpha, self.mu, self.beta/self.alpha*np.eye(2), x)
 
