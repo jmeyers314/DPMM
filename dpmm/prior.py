@@ -348,19 +348,39 @@ class NormInvGamma(Prior):
         self.b_0 = float(b_0)
         super(NormInvGamma, self).__init__()
 
-    def sample(self, size=1):
-        var = 1./np.random.gamma(self.a_0, scale=1./self.b_0, size=size)
-        if size == 1:
-            return np.random.normal(self.m_0, np.sqrt(self.V_0*var)), var
-        else:
-            return zip(np.random.normal(self.m_0, np.sqrt(self.V_0*var), size=size), var)
+    model_dtype = np.dtype([('mu', float), ('var', float)])
 
-    def like1(self, x, mu, var):
+    def sample(self, size=None):
+        if size is None:
+            var = 1./np.random.gamma(self.a_0, scale=1./self.b_0)
+            ret = np.zeros(1, dtype=self.model_dtype)
+            ret['mu'] = np.random.normal(self.m_0, np.sqrt(self.V_0*var))
+            ret['var'] = var
+            return ret[0]
+        else:
+            var = 1./np.random.gamma(self.a_0, scale=1./self.b_0, size=size)
+            ret = np.zeros(size, dtype=self.model_dtype)
+            ret['mu'] = np.random.normal(self.m_0, np.sqrt(self.V_0), size=size)*np.sqrt(var)
+            ret['var'] = var
+            return ret
+
+    def like1(self, *args):
         """Returns likelihood Pr(x | mu, var), for a single data point."""
+        if len(args) == 3:
+            x, mu, var = args
+        elif len(args) == 2:
+            x, theta = args
+            mu = theta['mu']
+            var = theta['var']
         return np.exp(-0.5*(x-mu)**2/var) / np.sqrt(2*np.pi*var)
 
-    def __call__(self, mu, var):
+    def __call__(self, *args):
         """Returns Pr(mu, var), i.e., the prior density."""
+        if len(args) == 1:
+            mu = args['mu']
+            var = args['var']
+        elif len(args) == 2:
+            mu, var = args
         normal = np.exp(-0.5*(self.m_0-mu)**2/(var*self.V_0))/np.sqrt(2*np.pi*var*self.V_0)
         ig = self.b_0**self.a_0/gamma(self.a_0)*var**(-(self.a_0+1))*np.exp(-self.b_0/var)
         return normal*ig
