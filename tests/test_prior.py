@@ -314,7 +314,7 @@ def test_NormInvGamma():
         "NormInvGamma posterior predictive density does not integrate to 1.0")
 
     # Check that the likelihood integrates to 1.
-    r = quad(lambda x: nig.like1(x, mu=1.1, var=2.1), -np.inf, np.inf)
+    r = quad(lambda x: nig.like1(x, 1.1, 2.1), -np.inf, np.inf)
     np.testing.assert_almost_equal(r[0], 1.0, 10,
                                    "NormInvGamma likelihood does not integrate to 1.0")
 
