@@ -300,8 +300,8 @@ class NormInvChi2(Prior):
         if len(args) == 2:
             mu, var = args
         elif len(args) == 1:
-            mu = args['mu']
-            var = args['var']
+            mu = args[0]['mu']
+            var = args[0]['var']
         return (normal_density(self.mu_0, var/self.kappa_0, mu) *
                 scaled_IX_density(self.nu_0, self.sigsqr_0, var))
 
@@ -392,8 +392,8 @@ class NormInvGamma(Prior):
     def __call__(self, *args):
         """Returns Pr(mu, var), i.e., the prior density."""
         if len(args) == 1:
-            mu = args['mu']
-            var = args['var']
+            mu = args[0]['mu']
+            var = args[0]['var']
         elif len(args) == 2:
             mu, var = args
         normal = np.exp(-0.5*(self.m_0-mu)**2/(var*self.V_0))/np.sqrt(2*np.pi*var*self.V_0)

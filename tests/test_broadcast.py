@@ -43,18 +43,23 @@ def test_InvGamma():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (1,)
     assert arr.dtype == float
+    assert arr[0] == prior.like1(x[0], var)
 
     x = np.array([1.0, 2.0])
     arr = prior.like1(x, var)
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2,)
     assert arr.dtype == float
+    for i, r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i], var)
 
     x = np.array([[1.0, 2.0], [3.0, 4.0]])
     arr = prior.like1(x, var)
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2, 2)
     assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i, j], var)
 
     x = np.array([1.0, 2.0])
     var = np.array([2.0, 3.0])
@@ -62,6 +67,9 @@ def test_InvGamma():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2,)
     assert arr.dtype == float
+    for i, r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i], var[i])
+
 
     x = np.array([1.0, 2.0])
     var = np.array([1.0, 2.0, 3.0])
@@ -69,21 +77,29 @@ def test_InvGamma():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2, 3)
     assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i], var[j])
     arr = prior.like1(x, var[:, np.newaxis])
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (3, 2)
     assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[j], var[i])
 
     x = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
-    y = np.array([10.0, 11.0, 12.0, 13.0])
-    arr = prior.like1(x[:, :, np.newaxis], y)
+    var = np.array([10.0, 11.0, 12.0, 13.0])
+    arr = prior.like1(x[:, :, np.newaxis], var)
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2, 3, 4)
     assert arr.dtype == float
-    arr = prior.like1(x, y[:, np.newaxis, np.newaxis])
+    for (i, j, k), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i, j], var[k])
+    arr = prior.like1(x, var[:, np.newaxis, np.newaxis])
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (4, 2, 3)
     assert arr.dtype == float
+    for (i, j, k), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[j, k], var[i])
 
     # Test __call__() method:
     prior = dpmm.InvGamma(1.0, 1.0, 0.0)
@@ -96,18 +112,23 @@ def test_InvGamma():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (1,)
     assert arr.dtype == float
+    assert arr[0] == prior(var[0])
 
     var = np.array([1.0, 2.0])
     arr = prior(var)
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2,)
     assert arr.dtype == float
+    for i, r in np.ndenumerate(arr):
+        assert r == prior(var[i])
 
     var = np.array([[1.0, 2.0], [3.0, 4.0]])
     arr = prior(var)
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2, 2)
     assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior(var[i, j])
 
     # Should _post_params method do any broadcasting?
 
@@ -122,18 +143,23 @@ def test_InvGamma():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (1,)
     assert arr.dtype == float
+    assert arr[0] == prior.pred(x[0])
 
     x = np.array([1.0, 2.0])
     arr = prior.pred(x)
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2,)
     assert arr.dtype == float
+    for i, r in np.ndenumerate(arr):
+        assert r == prior.pred(x[i])
 
-    x = np.array([[1.0, 2.0], [3.0, 4.0]])
+    x = np.arange(6.0).reshape(3, 2)+1
     arr = prior.pred(x)
     assert isinstance(arr, np.ndarray)
-    assert arr.shape == (2, 2)
+    assert arr.shape == (3, 2)
     assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior.pred(x[i, j])
 
 
 @timer
@@ -182,6 +208,8 @@ def test_InvGamma2D():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (3,)
     assert arr.dtype == float
+    for i, r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i], var)
 
     x = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
     var = np.array([2.0, 3.0])
@@ -189,6 +217,8 @@ def test_InvGamma2D():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2, 3)
     assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[j], var[i])
 
     x = np.arange(24, dtype=float).reshape(3, 4, 2)
     var = np.array([2.0, 3.0])
@@ -196,6 +226,8 @@ def test_InvGamma2D():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (3, 4, 2)
     assert arr.dtype == float
+    for (i, j, k), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i, j], var[k])
 
     x = np.arange(24, dtype=float).reshape(3, 4, 2)
     var = np.arange(12, dtype=float).reshape(3, 4) + 1  # add 1 so we don't divide by zero
@@ -203,6 +235,8 @@ def test_InvGamma2D():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (3, 4)
     assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i, j], var[i, j])
 
     # Test __call__() method:
     prior = dpmm.InvGamma2D(1.0, 1.0, np.array([0.0, 0.0]))
@@ -215,18 +249,23 @@ def test_InvGamma2D():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (1,)
     assert arr.dtype == float
+    assert arr[0] == prior(var[0])
 
     var = np.array([1.0, 2.0])
     arr = prior(var)
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2,)
     assert arr.dtype == float
+    for i, r in np.ndenumerate(arr):
+        assert r == prior(var[i])
 
     var = np.array([[1.0, 2.0], [3.0, 4.0]])
     arr = prior(var)
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2, 2)
     assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior(var[i, j])
 
     # Should _post_params method do any broadcasting?
 
@@ -241,10 +280,11 @@ def test_InvGamma2D():
 
     x = np.arange(24, dtype=float).reshape(3, 4, 2)
     arr = prior.pred(x)
-    print arr
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (3, 4)
     assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior.pred(x[i, j])
 
 
 @timer
@@ -292,6 +332,7 @@ def test_NormInvGamma():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (1,)
     assert arr.dtype == float
+    assert arr[0] == prior.like1(x[0], mu, var)
 
     x = np.array([1.0, 2.0, 3.0, 4.0])
     mu = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
@@ -300,6 +341,8 @@ def test_NormInvGamma():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (4, 2, 3)
     assert arr.dtype == float
+    for (i, j, k), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i], mu[j, k], var[j, k])
 
     theta = np.zeros((2, 3), dtype=prior.model_dtype)
     theta['mu'] = mu
@@ -308,16 +351,22 @@ def test_NormInvGamma():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (4, 2, 3)
     assert arr.dtype == float
+    for (i, j, k), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i], theta['mu'][j, k], theta['var'][j, k])
 
     arr = prior.like1(x, mu[:, :, np.newaxis], var[:, :, np.newaxis])
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2, 3, 4)
     assert arr.dtype == float
+    for (i, j, k), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[k], mu[i, j], var[i, j])
 
     arr = prior.like1(x, theta[:, :, np.newaxis])
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2, 3, 4)
     assert arr.dtype == float
+    for (i, j, k), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[k], theta['mu'][i, j], theta['var'][i, j])
 
     # Test __call__() method:
     prior = dpmm.NormInvGamma(1.0, 1.0, 1.0, 1.0)
@@ -331,6 +380,7 @@ def test_NormInvGamma():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (1,)
     assert arr.dtype == float
+    assert arr[0] == prior(mu[0], var)
 
     mu = np.array([1.0, 2.0])
     var = np.array([10.0, 11.0, 12.0])
@@ -338,6 +388,18 @@ def test_NormInvGamma():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2, 3)
     assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior(mu[i], var[j])
+
+    theta = np.zeros((2, 3), dtype=prior.model_dtype)
+    theta['mu'] = mu[:, np.newaxis]
+    theta['var'] = var
+    arr = prior(theta)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (2, 3)
+    assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior(theta['mu'][i, j], theta['var'][i, j])
 
     # Should _post_params method do any broadcasting?
 
@@ -352,18 +414,23 @@ def test_NormInvGamma():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (1,)
     assert arr.dtype == float
+    assert arr[0] == prior.pred(x[0])
 
     x = np.array([1.0, 2.0])
     arr = prior.pred(x)
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2,)
     assert arr.dtype == float
+    for i, r in np.ndenumerate(arr):
+        assert r == prior.pred(x[i])
 
     x = np.array([[1.0, 2.0], [3.0, 4.0]])
     arr = prior.pred(x)
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2, 2)
     assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior.pred(x[i, j])
 
 
 @timer
@@ -411,6 +478,7 @@ def test_NormInvChi2():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (1,)
     assert arr.dtype == float
+    assert arr[0] == prior.like1(x[0], mu, var)
 
     x = np.array([1.0, 2.0, 3.0, 4.0])
     mu = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
@@ -419,6 +487,8 @@ def test_NormInvChi2():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (4, 2, 3)
     assert arr.dtype == float
+    for (i, j, k), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i], mu[j, k], var[j, k])
 
     theta = np.zeros((2, 3), dtype=prior.model_dtype)
     theta['mu'] = mu
@@ -427,16 +497,22 @@ def test_NormInvChi2():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (4, 2, 3)
     assert arr.dtype == float
+    for (i, j, k), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i], theta['mu'][j, k], theta['var'][j, k])
 
     arr = prior.like1(x, mu[:, :, np.newaxis], var[:, :, np.newaxis])
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2, 3, 4)
     assert arr.dtype == float
+    for (i, j, k), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[k], mu[i, j], var[i, j])
 
     arr = prior.like1(x, theta[:, :, np.newaxis])
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2, 3, 4)
     assert arr.dtype == float
+    for (i, j, k), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[k], theta['mu'][i, j], theta['var'][i, j])
 
     # Test __call__() method:
     prior = dpmm.NormInvChi2(1.0, 1.0, 1.0, 1.0)
@@ -450,6 +526,7 @@ def test_NormInvChi2():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (1,)
     assert arr.dtype == float
+    assert arr[0] == prior(mu[0], var)
 
     mu = np.array([1.0, 2.0])
     var = np.array([10.0, 11.0, 12.0])
@@ -457,6 +534,18 @@ def test_NormInvChi2():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2, 3)
     assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior(mu[i], var[j])
+
+    theta = np.zeros((2, 3), dtype=prior.model_dtype)
+    theta['mu'] = mu[:, np.newaxis]
+    theta['var'] = var
+    arr = prior(theta)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (2, 3)
+    assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior(theta['mu'][i, j], theta['var'][i, j])
 
     # Should _post_params method do any broadcasting?
 
@@ -471,18 +560,23 @@ def test_NormInvChi2():
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (1,)
     assert arr.dtype == float
+    assert arr[0] == prior.pred(x[0])
 
     x = np.array([1.0, 2.0])
     arr = prior.pred(x)
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2,)
     assert arr.dtype == float
+    for i, r in np.ndenumerate(arr):
+        assert r == prior.pred(x[i])
 
     x = np.array([[1.0, 2.0], [3.0, 4.0]])
     arr = prior.pred(x)
     assert isinstance(arr, np.ndarray)
     assert arr.shape == (2, 2)
     assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior.pred(x[i, j])
 
 
 if __name__ == '__main__':
