@@ -43,7 +43,11 @@ class DPMM(object):
         self.label = np.zeros((self.n), dtype=int)
         self.phi = []
         self.nphi = []
-        for i in xrange(self.n):
+        # Seed the first data element to it's own cluster.
+        self.phi.append(self.prior.post(self.mD[0]).sample())
+        self.nphi.append(1)
+        # And then let the rest percolate off of that.
+        for i in xrange(1, self.n):
             self.update_c_i(i)
 
     @property
@@ -65,7 +69,7 @@ class DPMM(object):
         # This is essentially Neal (2000) equation (3.6)
         # Start off with the probabilities for cloning an existing cluster:
         p = [l1 * nphi
-             for l1, nphi in itertools.izip(self.prior.like1(self.mD[i], self.phi),
+             for l1, nphi in itertools.izip(self.prior.like1(self.mD[i], np.array(self.phi)),
                                             self.nphi)]
         # in the above, we're broadcasting over multiple phi values to get multiple probs.
         # Next, append the probability to create a new cluster.

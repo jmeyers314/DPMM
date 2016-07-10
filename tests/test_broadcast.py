@@ -3,6 +3,165 @@ import dpmm
 from test_utils import timer
 
 @timer
+def test_GaussianMeanKnownVariance():
+    """Test broadcasting rules for GaussianMeanKnownVariance prior."""
+
+    # Test sample() method:
+    prior = dpmm.GaussianMeanKnownVariance(1.0, 1.0, 1.0)
+    arr = prior.sample()
+    assert isinstance(arr, float)
+
+    arr = prior.sample(size=1)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (1,)
+    assert arr.dtype == float
+
+    arr = prior.sample(size=(1,))
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (1,)
+    assert arr.dtype == float
+
+    arr = prior.sample(size=10)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (10,)
+    assert arr.dtype == float
+
+    arr = prior.sample(size=(10, 20))
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (10, 20)
+    assert arr.dtype == float
+
+    # Test like1() method:
+    prior = dpmm.GaussianMeanKnownVariance(1.0, 1.0, 1.0)
+    x = 1.0
+    mu = 1.0
+    arr = prior.like1(x, mu)
+    assert isinstance(arr, float)
+
+    x = np.array([1.0])
+    arr = prior.like1(x, mu)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (1,)
+    assert arr.dtype == float
+    assert arr[0] == prior.like1(x[0], mu)
+
+    x = np.array([1.0, 2.0])
+    arr = prior.like1(x, mu)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (2,)
+    assert arr.dtype == float
+    for i, r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i], mu)
+
+    x = np.array([[1.0, 2.0], [3.0, 4.0]])
+    arr = prior.like1(x, mu)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (2, 2)
+    assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i, j], mu)
+
+    x = np.array([1.0, 2.0])
+    mu = np.array([2.0, 3.0])
+    arr = prior.like1(x, mu)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (2,)
+    assert arr.dtype == float
+    for i, r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i], mu[i])
+
+    x = np.array([1.0, 2.0])
+    mu = np.array([1.0, 2.0, 3.0])
+    arr = prior.like1(x[:, np.newaxis], mu)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (2, 3)
+    assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i], mu[j])
+    arr = prior.like1(x, mu[:, np.newaxis])
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (3, 2)
+    assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[j], mu[i])
+
+    x = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    mu = np.array([10.0, 11.0, 12.0, 13.0])
+    arr = prior.like1(x[:, :, np.newaxis], mu)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (2, 3, 4)
+    assert arr.dtype == float
+    for (i, j, k), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[i, j], mu[k])
+    arr = prior.like1(x, mu[:, np.newaxis, np.newaxis])
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (4, 2, 3)
+    assert arr.dtype == float
+    for (i, j, k), r in np.ndenumerate(arr):
+        assert r == prior.like1(x[j, k], mu[i])
+
+    # Test __call__() method:
+    prior = dpmm.GaussianMeanKnownVariance(1.0, 1.0, 1.0)
+    mu = 1.0
+    arr = prior(mu)
+    assert isinstance(arr, float)
+
+    mu = np.array([1.0])
+    arr = prior(mu)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (1,)
+    assert arr.dtype == float
+    assert arr[0] == prior(mu[0])
+
+    mu = np.array([1.0, 2.0])
+    arr = prior(mu)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (2,)
+    assert arr.dtype == float
+    for i, r in np.ndenumerate(arr):
+        assert r == prior(mu[i])
+
+    mu = np.array([[1.0, 2.0], [3.0, 4.0]])
+    arr = prior(mu)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (2, 2)
+    assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior(mu[i, j])
+
+    # Should _post_params method do any broadcasting?
+
+    # Test pred method():
+    prior = dpmm.InvGamma(1.0, 1.0, 0.0)
+    x = 1.0
+    arr = prior.pred(x)
+    assert isinstance(arr, float)
+
+    x = np.array([1.0])
+    arr = prior.pred(x)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (1,)
+    assert arr.dtype == float
+    assert arr[0] == prior.pred(x[0])
+
+    x = np.array([1.0, 2.0])
+    arr = prior.pred(x)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (2,)
+    assert arr.dtype == float
+    for i, r in np.ndenumerate(arr):
+        assert r == prior.pred(x[i])
+
+    x = np.arange(6.0).reshape(3, 2)+1
+    arr = prior.pred(x)
+    assert isinstance(arr, np.ndarray)
+    assert arr.shape == (3, 2)
+    assert arr.dtype == float
+    for (i, j), r in np.ndenumerate(arr):
+        assert r == prior.pred(x[i, j])
+
+
+@timer
 def test_InvGamma():
     """Test broadcasting rules for InvGamma prior."""
 
@@ -580,6 +739,7 @@ def test_NormInvChi2():
 
 
 if __name__ == '__main__':
+    test_GaussianMeanKnownVariance()
     test_InvGamma()
     test_InvGamma2D()
     test_NormInvGamma()

@@ -7,3 +7,4 @@ from .prior import NormInvWish, GaussianMeanKnownVariance, NormInvChi2, NormInvG
 from .prior import InvGamma2D
 from .data import PseudoMarginalData
 from .shear import Linear1DShear, Shear, WeakShear
+from .gmm import GaussND, GMM

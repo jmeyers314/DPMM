@@ -198,7 +198,7 @@ class GaussianMeanKnownVariance(Prior):
     def sample(self, size=None):
         """Return a sample `mu` or samples [mu1, mu2, ...] from distribution."""
         if size is None:
-            return (np.random.normal(self.mu_0, np.sqrt(self.sigsqr_0)),)
+            return np.random.normal(self.mu_0, np.sqrt(self.sigsqr_0))
         else:
             return np.random.normal(self.mu_0, np.sqrt(self.sigsqr_0), size=size)
 
