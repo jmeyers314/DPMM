@@ -111,15 +111,15 @@ def test_multivariate_t_density(args):
            multivariate_t_density(nu, mu, Sig, xy2)]
     xys = np.vstack([xy1, xy2])
     pr2 = multivariate_t_density(nu, mu, Sig, xys)
-    np.testing.assert_equal(pr1, pr2, "multivariate_t_density does not vectorize correctly")
+    np.testing.assert_array_almost_equal(pr1, pr2, 15, "multivariate_t_density does not vectorize correctly")
 
     # And a harder, higher dimensional case...
     xys = np.arange(24.0).reshape(4, 3, 2)
     prs = multivariate_t_density(nu, mu, Sig, xys)
     assert prs.shape == (4, 3)
     for (i, j), pr in np.ndenumerate(prs):
-        np.testing.assert_equal(
-                pr, multivariate_t_density(nu, mu, Sig, xys[i, j]),
+        np.testing.assert_array_almost_equal(
+                pr, multivariate_t_density(nu, mu, Sig, xys[i, j]), 15,
                 "multivariate_t_density does not vectorize correctly")
 
 
