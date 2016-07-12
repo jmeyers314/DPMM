@@ -180,7 +180,8 @@ class InvGamma(Prior):
 
     def pred(self, x):
         """Prior predictive.  Pr(x)"""
-        return t_density(2*self.alpha, self.mu, self.beta/self.alpha, x)
+        # Careful.  Use 1/beta/alpha to match Murphy, not wikipedia!
+        return t_density(2*self.alpha, self.mu, 1./self.beta/self.alpha, x)
 
     def evidence(self, D):
         """Fully marginalized likelihood Pr(D)"""
@@ -228,8 +229,8 @@ class InvGamma2D(Prior):
         """Prior predictive.  Pr(x)"""
         assert isinstance(x, np.ndarray)
         assert x.shape[-1] == 2
-        # Is this a multivariate t?  Definitely a nearly blind guess here.
-        return multivariate_t_density(2*self.alpha, self.mu, self.beta/self.alpha*np.eye(2), x)
+        # Generalized from InvGamma.  Tested numerically.
+        return multivariate_t_density(2*self.alpha, self.mu, 1./self.beta/self.alpha*np.eye(2), x)
 
     def evidence(self, D):
         """Fully marginalized likelihood Pr(D)"""

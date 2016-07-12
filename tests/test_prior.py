@@ -73,6 +73,14 @@ def test_GaussianMeanKnownVariance():
         posts/posts[0], posts2/posts2[0], 5,
         "GaussianMeanKnownVariance posterior not proportional to prior * likelihood.")
 
+    # Check that integrating out theta yields the prior predictive.
+    xs = [0.1, 0.2, 0.3, 0.4]
+    preds1 = np.array([quad(lambda theta: model(theta) * model.like1(x, theta), -np.inf, np.inf)[0] for x in xs])
+    preds2 = np.array([model.pred(x) for x in xs])
+
+    np.testing.assert_array_almost_equal(
+            preds1/preds1[0], preds2/preds2[0], 5,
+            "Prior predictive not proportional to integral of likelihood * prior")
 
 @timer
 def test_InvGamma():
@@ -128,6 +136,15 @@ def test_InvGamma():
         np.testing.assert_almost_equal(quad(lambda x: ig(x)*(x-mean)**2, 0.0, np.inf)[0], var, 5,
                                        "InvGamma has wrong variance.")
 
+    # Check that integrating out theta yields the prior predictive.
+    xs = [0.1, 0.2, 0.3, 0.4]
+    preds1 = np.array([quad(lambda theta: ig(theta) * ig.like1(x, theta), 0, np.inf)[0] for x in xs])
+    preds2 = np.array([ig.pred(x) for x in xs])
+
+    np.testing.assert_array_almost_equal(
+            preds1/preds1[0], preds2/preds2[0], 5,
+            "Prior predictive not proportional to integral of likelihood * prior")
+
 
 @timer
 def test_InvGamma2D(full=False):
@@ -172,8 +189,8 @@ def test_InvGamma2D(full=False):
 
     # Check that posterior is proportional to prior * likelihood
     vars_ = [0.7, 1.1, 1.2, 1.5]
-    posts = [ig2d.post(D)(var) for var in vars_]
-    posts2 = [ig2d(var)*ig2d.likelihood(D, var) for var in vars_]
+    posts = np.array([ig2d.post(D)(var) for var in vars_])
+    posts2 = np.array([ig2d(var)*ig2d.likelihood(D, var) for var in vars_])
 
     np.testing.assert_array_almost_equal(
         posts/posts[0], posts2/posts2[0], 5,
@@ -188,6 +205,15 @@ def test_InvGamma2D(full=False):
         warnings.simplefilter('ignore')
         np.testing.assert_almost_equal(quad(lambda x: ig2d(x)*(x-mean)**2, 0.0, np.inf)[0], var, 5,
                                        "InvGamma2D has wrong variance.")
+
+    # Check that integrating out theta yields the prior predictive.
+    xs = [np.r_[0.1, 0.2], np.r_[0.2, 0.3], np.r_[0.1, 0.3]]
+    preds1 = np.array([quad(lambda theta: ig2d(theta) * ig2d.like1(x, theta), 0, np.inf)[0] for x in xs])
+    preds2 = np.array([ig2d.pred(x) for x in xs])
+
+    np.testing.assert_array_almost_equal(
+             preds1/preds1[0], preds2/preds2[0], 5,
+             "Prior predictive not proportional to integral of likelihood * prior")
 
 
 @timer
@@ -264,6 +290,17 @@ def test_NormInvChi2():
         Pr_mu1, Pr_mu2, 10,
         "Pr(mu) method calculation does not match integrated result.")
 
+    # Check that integrating out theta yields the prior predictive.
+    xs = [0.1, 0.2, 0.3, 0.4]
+    preds1 = np.array([dblquad(lambda mu, var: nix(mu, var) * nix.like1(x, mu, var),
+                               0, np.inf,
+                               lambda var: -np.inf, lambda var: np.inf)[0]
+                       for x in xs])
+    preds2 = np.array([nix.pred(x) for x in xs])
+
+    np.testing.assert_array_almost_equal(
+         preds1/preds1[0], preds2/preds2[0], 5,
+         "Prior predictive not proportional to integral of likelihood * prior")
 
 @timer
 def test_NormInvGamma():
@@ -340,6 +377,17 @@ def test_NormInvGamma():
         Pr_mu1, Pr_mu2, 10,
         "Pr(mu) method calculation does not match integrated result.")
 
+    # Check that integrating out theta yields the prior predictive.
+    xs = [0.1, 0.2, 0.3, 0.4]
+    preds1 = np.array([dblquad(lambda mu, var: nig(mu, var) * nig.like1(x, mu, var),
+                               0, np.inf,
+                               lambda var: -np.inf, lambda var: np.inf)[0]
+                       for x in xs])
+    preds2 = np.array([nig.pred(x) for x in xs])
+
+    np.testing.assert_array_almost_equal(
+         preds1/preds1[0], preds2/preds2[0], 5,
+         "Prior predictive not proportional to integral of likelihood * prior")
 
 @timer
 def test_NormInvChi2_eq_NormInvGamma():
@@ -469,6 +517,10 @@ def test_NormInvWish(full=False):
     post2 = [post(mu, Sig) for mu, Sig in zip(mus, Sigs)]
     np.testing.assert_array_almost_equal(post1, post2, 10,
                                          "NormInvWish posterior != prior * likelihood / evidence")
+
+   # Would like to check that pred(x) == int prior(theta) * like1(x, theta) d(theta), but I don't
+   # know how to integrate over all covariance matrices.  Plus, integrating over a 2D covariance
+   # matrix plus a 2D mean is a 5 dimensional integral, which sounds nasty to do.
 
 
 if __name__ == "__main__":
