@@ -67,14 +67,11 @@ class DPMM(object):
 
     def draw_new_label(self, i):
         # This is essentially Neal (2000) equation (3.6)
-        # Start off with the probabilities for cloning an existing cluster:
-        p = [l1 * nphi
-             for l1, nphi in itertools.izip(self.prior.like1(self.mD[i], np.array(self.phi)),
-                                            self.nphi)]
-        # in the above, we're broadcasting over multiple phi values to get multiple probs.
-        # Next, append the probability to create a new cluster.
-        p.append(self.r_i[i])
-        p = np.array(p)
+        # Start with probabilities for cloning an existing cluster, and then append the probability
+        # to create a new cluster.
+        p = np.empty(len(self.phi)+1, dtype=float)
+        p[:-1] = self.prior.like1(self.mD[i], np.array(self.phi)) * np.array(self.nphi)
+        p[-1] = self.r_i[i]
         # Normalize.  This essentially takes care of the factors of b/(n-1+alpha) in Neal (2000)
         # equation (3.6)
         p /= np.sum(p)
@@ -128,7 +125,7 @@ class DPMM(object):
                 index = np.nonzero(self.label == i)
                 data = self._D[index]  # a PseudoMarginalData instance
                 # calculate weights for selecting a representative sample
-                ps = self.prior.like1(self.manip(data.data), *ph)[..., 0] / data.interim_prior
+                ps = self.prior.like1(self.manip(data.data), ph) / data.interim_prior
                 ps /= np.sum(ps, axis=1)[:, np.newaxis]
                 for j, p in enumerate(ps):
                     self.D[index[0][j]] = data.data[j, pick_discrete(p)]
