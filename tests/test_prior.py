@@ -21,37 +21,39 @@ def test_NormInvWish(full=False):
     niw.sample(size=10)
 
     # Check that we can evaluate a likelihood given data.
-    theta = (np.r_[1., 1.], np.eye(2)+0.12)
+    theta = np.zeros(1, dtype=niw.model_dtype)
+    theta['mu'] = np.r_[1.0, 1.0]
+    theta['Sig'] = np.eye(2)+0.12
     D = np.array([[0.1, 0.2], [0.2, 0.3], [0.1, 0.2], [0.4, 0.3]])
-    niw.likelihood(D, *theta)
+    niw.likelihood(D, theta)
 
     # Evaluate prior
-    niw(*theta)
+    niw(theta)
 
     # Check prior predictive density
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        r = dblquad(lambda x, y: niw.pred([x, y]), -np.inf, np.inf,
+        r = dblquad(lambda x, y: niw.pred(np.r_[x, y]), -np.inf, np.inf,
                     lambda x: -np.inf, lambda x: np.inf)
     np.testing.assert_almost_equal(r[0], 1.0, 5,
                                    "NormInvWish prior predictive density does not integrate to 1.0")
 
     # Check posterior predictive density
-    r = dblquad(lambda x, y: niw.post(D).pred([x, y]), -np.inf, np.inf,
+    r = dblquad(lambda x, y: niw.post(D).pred(np.r_[x, y]), -np.inf, np.inf,
                 lambda x: -np.inf, lambda x: np.inf)
     np.testing.assert_almost_equal(
         r[0], 1.0, 5, "NormInvWish posterior predictive density does not integrate to 1.0")
 
     # Check that the likelihood of a single point in 2 dimensions integrates to 1.
-    r = dblquad(lambda x, y: niw.like1([x, y], mu=np.r_[1.2, 1.1], Sig=np.eye(2)+0.12),
+    r = dblquad(lambda x, y: niw.like1(np.r_[x, y], np.r_[1.2, 1.1], np.eye(2)+0.12),
                 -np.inf, np.inf, lambda x: -np.inf, lambda x: np.inf)
     np.testing.assert_almost_equal(r[0], 1.0, 10,
                                    "NormInvWish likelihood does not integrate to 1.0")
 
     if __name__ == "__main__" and full:
         # Check that likelihood of a single point in 3 dimensions integrates to 1.
-        niw3 = dpmm.NormInvWish([1]*3, 2.0, np.eye(3), 3)
-        r = tplquad(lambda x, y, z: niw3.like1([x, y, z], np.r_[0.1, 0.2, 0.3], np.eye(3)+0.1),
+        niw3 = dpmm.NormInvWish(np.r_[1, 1, 1], 2.0, np.eye(3), 3)
+        r = tplquad(lambda x, y, z: niw3.like1(np.r_[x, y, z], np.r_[0.1, 0.2, 0.3], np.eye(3)+0.1),
                     -np.inf, np.inf,
                     lambda x: -np.inf, lambda x: np.inf,
                     lambda x, y: -np.inf, lambda x, y: np.inf)

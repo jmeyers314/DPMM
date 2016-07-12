@@ -4,7 +4,7 @@
 from operator import mul
 import numpy as np
 from scipy.special import gamma
-from utils import vTmv, gammad, random_invwish
+from utils import gammad, random_invwish
 from density import multivariate_t_density, t_density, normal_density, scaled_IX_density
 
 
@@ -65,108 +65,6 @@ class Prior(object):
     def pred(self, x):
         """Prior predictive.  Pr(x | params)"""
         raise NotImplementedError
-
-
-class NormInvWish(Prior):
-    """Normal-Inverse-Wishart prior for multivariate Gaussian distribution.
-
-    Model parameters
-    ----------------
-    mu :    multivariate mean
-    Sig : covariance matrix
-
-    Prior parameters
-    ----------------
-    mu_0
-    kappa_0
-    Lam_0
-    nu_0
-    """
-    def __init__(self, mu_0, kappa_0, Lam_0, nu_0):
-        self.mu_0 = np.array(mu_0, dtype=float)
-        self.kappa_0 = float(kappa_0)
-        self.Lam_0 = np.array(Lam_0, dtype=float)
-        self.nu_0 = nu_0
-        self.d = len(mu_0)
-        super(NormInvWish, self).__init__()
-
-    def _S(self, D):
-        """Scatter matrix.  D is [NOBS, NDIM].  Returns [NDIM, NDIM] array."""
-        # Eq (244)
-        Dbar = np.mean(D, axis=0)
-        return vTmv(D-Dbar)
-
-    def sample(self, size=1):
-        """Return a sample {mu, Sig} or list of samples [{mu_1, Sig_1}, ...] from
-        distribution.
-        """
-        Sig = random_invwish(dof=self.nu_0, invS=self.Lam_0, size=size)
-        if size == 1:
-            return np.random.multivariate_normal(self.mu_0, Sig/self.kappa_0), Sig
-        else:
-            return zip((np.random.multivariate_normal(self.mu_0, S/self.kappa_0) for S in Sig),
-                       Sig)
-
-    def like1(self, x, mu, Sig):
-        """Returns likelihood Pr(x | mu, Sig), for a single data point."""
-        norm = np.sqrt((2*np.pi)**self.d * np.linalg.det(Sig))
-        return np.exp(-0.5*vTmv(x-mu, np.linalg.inv(Sig)).flat[0]) / norm
-
-    def __call__(self, mu, Sig):
-        """Returns Pr(mu, Sig), i.e., the prior."""
-        nu_0, d = self.nu_0, self.d
-        # Eq (249)
-        Z = (2.0**(nu_0*d/2.0) * gammad(d, nu_0/2.0) *
-             (2.0*np.pi/self.kappa_0)**(d/2.0) / np.linalg.det(self.Lam_0)**(nu_0/2.0))
-        detSig = np.linalg.det(Sig)
-        invSig = np.linalg.inv(Sig)
-        # Eq (248)
-        return 1./Z * detSig**(-((nu_0+d)/2.0+1.0)) * np.exp(
-            -0.5*np.trace(np.dot(self.Lam_0, invSig)) -
-            self.kappa_0/2.0*vTmv(mu-self.mu_0, invSig).flat[0])
-
-    def _post_params(self, D):
-        """Recall D is [NOBS, NDIM]."""
-        shape = D.shape
-        if len(shape) == 2:
-            n = shape[0]
-            Dbar = np.mean(D, axis=0)
-        elif len(shape) == 1:
-            n = 1
-            Dbar = np.mean(D)
-        # Eq (252)
-        kappa_n = self.kappa_0 + n
-        # Eq (253)
-        nu_n = self.nu_0 + n
-        # Eq (251) (note typo in original, mu+0 -> mu_0)
-        mu_n = (self.kappa_0 * self.mu_0 + n * Dbar) / kappa_n
-        # Eq (254)
-        x = (Dbar-self.mu_0)[:, np.newaxis]
-        Lam_n = (self.Lam_0 +
-                 self._S(D) +
-                 self.kappa_0*n/kappa_n*vTmv(x.T))
-        return mu_n, kappa_n, Lam_n, nu_n
-
-    def pred(self, x):
-        """Prior predictive.  Pr(x)"""
-        return multivariate_t_density(self.nu_0-self.d+1, self.mu_0,
-                                      self.Lam_0*(self.kappa_0+1)/(self.kappa_0 - self.d + 1), x)
-
-    def evidence(self, D):
-        """Return Pr(D) = \int Pr(D | theta) Pr(theta)"""
-        shape = D.shape
-        if len(shape) == 2:
-            n, d = shape
-        elif len(shape) == 1:
-            n, d = 1, shape[0]
-        assert d == self.d
-        # Eq (266)
-        mu_n, kappa_n, Lam_n, nu_n = self._post_params(D)
-        detLam0 = np.linalg.det(self.Lam_0)
-        detLamn = np.linalg.det(Lam_n)
-        num = gammad(d, nu_n/2.0) * detLam0**(self.nu_0/2.0)
-        den = np.pi**(n*d/2.0) * gammad(d, self.nu_0/2.0) * detLamn**(nu_n/2.0)
-        return num/den * (self.kappa_0/kappa_n)**(d/2.0)
 
 
 class GaussianMeanKnownVariance(Prior):
@@ -244,6 +142,93 @@ class GaussianMeanKnownVariance(Prior):
     #     expnum += 2.0*n*Dbar*self.mu_0
     #     expden = 2.0*(n*self.sigsqr_0+self.sigsqr)
     #     return num/den*np.exp(exponent+expnum/expden)
+
+
+class InvGamma(Prior):
+    """Inverse Gamma distribution.  Note this parameterization matches Murphy's, not wikipedia's."""
+    def __init__(self, alpha, beta, mu):
+        self.alpha = alpha
+        self.beta = beta
+        self.mu = mu
+        super(InvGamma, self).__init__()
+
+    def sample(self, size=None):
+        return 1./np.random.gamma(self.alpha, scale=self.beta, size=size)
+
+    def like1(self, x, var):
+        """Returns likelihood Pr(x | var), for a single data point."""
+        return np.exp(-0.5*(x-self.mu)**2/var) / np.sqrt(2*np.pi*var)
+
+    def __call__(self, var):
+        """Returns Pr(var), i.e., the prior density."""
+        al, be = self.alpha, self.beta
+        return be**(-al)/gamma(al) * var**(-1.-al) * np.exp(-1./(be*var))
+
+    def _post_params(self, D):
+        try:
+            n = len(D)
+        except TypeError:
+            n = 1
+        al_n = self.alpha + n/2.0
+        be_n = 1./(1./self.beta + 0.5*np.sum((np.array(D)-self.mu)**2))
+        return al_n, be_n, self.mu
+
+    def pred(self, x):
+        """Prior predictive.  Pr(x)"""
+        return t_density(2*self.alpha, self.mu, self.beta/self.alpha, x)
+
+    def evidence(self, D):
+        """Fully marginalized likelihood Pr(D)"""
+        raise NotImplementedError
+
+
+class InvGamma2D(Prior):
+    """Inverse Gamma distribution, but for modeling 2D covariance matrices proportional to the
+    identity matrix."""
+    def __init__(self, alpha, beta, mu):
+        self.alpha = alpha
+        self.beta = beta
+        self.mu = np.array(mu)
+        assert len(mu) == 2
+        super(InvGamma2D, self).__init__()
+
+    def sample(self, size=None):
+        return 1./np.random.gamma(self.alpha, scale=self.beta, size=size)
+
+    def like1(self, x, var):
+        """Returns likelihood Pr(x | var), for a single data point."""
+        assert isinstance(x, np.ndarray)
+        assert x.shape[-1] == 2
+        return np.exp(-0.5*np.sum((x-self.mu)**2, axis=-1)/var) / (2*np.pi*var)
+
+    def lnlikelihood(self, D, var):
+        """Returns the log likelihood for data D"""
+        return -0.5*np.sum((D-self.mu)**2)/var - D.shape[0]*np.log(2*np.pi*var)
+
+    def __call__(self, var):
+        """Returns Pr(var), i.e., the prior density."""
+        al, be = self.alpha, self.beta
+        return be**(-al)/gamma(al) * var**(-1.-al) * np.exp(-1./(be*var))
+
+    def _post_params(self, D):
+        try:
+            n = len(D)
+        except TypeError:
+            n = 1
+        al_n = self.alpha + n  # it's + n/2.0 in InvGamma, but in 2D it's + n.
+        be_n = 1./(1./self.beta + 0.5*np.sum((np.array(D)-self.mu)**2))  # Same formula for beta.
+        return al_n, be_n, self.mu
+
+    def pred(self, x):
+        """Prior predictive.  Pr(x)"""
+        assert isinstance(x, np.ndarray)
+        assert x.shape[-1] == 2
+        # Is this a multivariate t?  Definitely a nearly blind guess here.
+        return multivariate_t_density(2*self.alpha, self.mu, self.beta/self.alpha*np.eye(2), x)
+
+    def evidence(self, D):
+        """Fully marginalized likelihood Pr(D)"""
+        raise NotImplementedError
 
 
 class NormInvChi2(Prior):
@@ -447,88 +432,130 @@ class NormInvGamma(Prior):
         return t_density(nu_0, mu_0, sigsqr_0/kappa_0, mu)
 
 
-class InvGamma(Prior):
-    """Inverse Gamma distribution.  Note this parameterization matches Murphy's, not wikipedia's."""
-    def __init__(self, alpha, beta, mu):
-        self.alpha = alpha
-        self.beta = beta
-        self.mu = mu
-        super(InvGamma, self).__init__()
+class NormInvWish(Prior):
+    """Normal-Inverse-Wishart prior for multivariate Gaussian distribution.
+
+    Model parameters
+    ----------------
+    mu :    multivariate mean
+    Sig : covariance matrix
+
+    Prior parameters
+    ----------------
+    mu_0
+    kappa_0
+    Lam_0
+    nu_0
+    """
+    def __init__(self, mu_0, kappa_0, Lam_0, nu_0):
+        self.mu_0 = np.array(mu_0, dtype=float)
+        self.kappa_0 = float(kappa_0)
+        self.Lam_0 = np.array(Lam_0, dtype=float)
+        self.nu_0 = int(nu_0)
+        self.d = len(mu_0)
+        self.model_dtype = np.dtype([('mu', float, self.d), ('Sig', float, (self.d, self.d))])
+        super(NormInvWish, self).__init__()
+
+    def _S(self, D):
+        """Scatter matrix.  D is [NOBS, NDIM].  Returns [NDIM, NDIM] array."""
+        # Eq (244)
+        Dbar = np.mean(D, axis=0)
+        return np.dot((D-Dbar).T, (D-Dbar))
 
     def sample(self, size=None):
-        return 1./np.random.gamma(self.alpha, scale=self.beta, size=size)
+        """Return a sample {mu, Sig} or list of samples [{mu_1, Sig_1}, ...] from
+        distribution.
+        """
+        Sig = random_invwish(dof=self.nu_0, invS=self.Lam_0, size=size)
+        if size is None:
+            ret = np.zeros(1, dtype=self.model_dtype)
+            ret['Sig'] = Sig
+            ret['mu'] = np.random.multivariate_normal(self.mu_0, Sig/self.kappa_0)
+            return ret[0]
+        else:
+            ret = np.zeros(size, dtype=self.model_dtype)
+            ret['Sig'] = Sig
+            for r in ret.ravel():
+                r['mu'] = np.random.multivariate_normal(self.mu_0, r['Sig']/self.kappa_0)
+            return ret
 
-    def like1(self, x, var):
-        """Returns likelihood Pr(x | var), for a single data point."""
-        return np.exp(-0.5*(x-self.mu)**2/var) / np.sqrt(2*np.pi*var)
+    def like1(self, *args):
+        """Returns likelihood Pr(x | mu, Sig), for a single data point."""
+        if len(args) == 2:
+            x, theta = args
+            mu = theta['mu']
+            Sig = theta['Sig']
+        elif len(args) == 3:
+            x, mu, Sig = args
+        assert x.shape[-1] == self.d
+        assert mu.shape[-1] == self.d
+        assert Sig.shape[-1] == Sig.shape[-2] == self.d
+        norm = np.sqrt((2*np.pi)**self.d * np.linalg.det(Sig))
+        # Tricky to make this broadcastable...
+        einsum = np.einsum("...i,...ij,...j", x-mu, np.linalg.inv(Sig), x-mu)
+        return np.exp(-0.5*einsum)/norm
 
-    def __call__(self, var):
-        """Returns Pr(var), i.e., the prior density."""
-        al, be = self.alpha, self.beta
-        return be**(-al)/gamma(al) * var**(-1.-al) * np.exp(-1./(be*var))
+    def __call__(self, *args):
+        """Returns Pr(mu, Sig), i.e., the prior."""
+        if len(args) == 1:
+            mu = args[0]['mu']
+            Sig = args[0]['Sig']
+        elif len(args) == 2:
+            mu, Sig = args
+        nu_0, d = self.nu_0, self.d
+        # Eq (249)
+        Z = (2.0**(nu_0*d/2.0) * gammad(d, nu_0/2.0) *
+             (2.0*np.pi/self.kappa_0)**(d/2.0) / np.linalg.det(self.Lam_0)**(nu_0/2.0))
+        detSig = np.linalg.det(Sig)
+        invSig = np.linalg.inv(Sig)
+        einsum = np.einsum("...i,...ij,...j", mu-self.mu_0, invSig, mu-self.mu_0)
+        # Eq (248)
+        return 1./Z * detSig**(-((nu_0+d)/2.0+1.0)) * np.exp(
+            -0.5*np.trace(np.einsum("...ij,...jk->...ik", self.Lam_0, invSig), axis1=-2, axis2=-1) -
+            self.kappa_0/2.0*einsum)
+        # return 1./Z * detSig**(-((nu_0+d)/2.0+1.0)) * np.exp(
+        #     -0.5*np.trace(np.dot(self.Lam_0, invSig)) -
+        #     self.kappa_0/2.0*einsum)
 
     def _post_params(self, D):
-        try:
-            n = len(D)
-        except TypeError:
+        """Recall D is [NOBS, NDIM]."""
+        shape = D.shape
+        if len(shape) == 2:
+            n = shape[0]
+            Dbar = np.mean(D, axis=0)
+        elif len(shape) == 1:
             n = 1
-        al_n = self.alpha + n/2.0
-        be_n = 1./(1./self.beta + 0.5*np.sum((np.array(D)-self.mu)**2))
-        return al_n, be_n, self.mu
+            Dbar = np.mean(D)
+        # Eq (252)
+        kappa_n = self.kappa_0 + n
+        # Eq (253)
+        nu_n = self.nu_0 + n
+        # Eq (251) (note typo in original, mu+0 -> mu_0)
+        mu_n = (self.kappa_0 * self.mu_0 + n * Dbar) / kappa_n
+        # Eq (254)
+        x = (Dbar-self.mu_0)[:, np.newaxis]
+        Lam_n = (self.Lam_0 +
+                 self._S(D) +
+                 self.kappa_0*n/kappa_n*np.dot(x, x.T))
+        return mu_n, kappa_n, Lam_n, nu_n
 
     def pred(self, x):
         """Prior predictive.  Pr(x)"""
-        return t_density(2*self.alpha, self.mu, self.beta/self.alpha, x)
+        return multivariate_t_density(self.nu_0-self.d+1, self.mu_0,
+                                      self.Lam_0*(self.kappa_0+1)/(self.kappa_0 - self.d + 1), x)
 
     def evidence(self, D):
-        """Fully marginalized likelihood Pr(D)"""
-        raise NotImplementedError
-
-
-class InvGamma2D(Prior):
-    """Inverse Gamma distribution, but for modeling 2D covariance matrices proportional to the
-    identity matrix."""
-    def __init__(self, alpha, beta, mu):
-        self.alpha = alpha
-        self.beta = beta
-        self.mu = np.array(mu)
-        assert len(mu) == 2
-        super(InvGamma2D, self).__init__()
-
-    def sample(self, size=None):
-        return 1./np.random.gamma(self.alpha, scale=self.beta, size=size)
-
-    def like1(self, x, var):
-        """Returns likelihood Pr(x | var), for a single data point."""
-        assert isinstance(x, np.ndarray)
-        assert x.shape[-1] == 2
-        return np.exp(-0.5*np.sum((x-self.mu)**2, axis=-1)/var) / (2*np.pi*var)
-
-    def lnlikelihood(self, D, var):
-        """Returns the log likelihood for data D"""
-        return -0.5*np.sum((D-self.mu)**2)/var - D.shape[0]*np.log(2*np.pi*var)
-
-    def __call__(self, var):
-        """Returns Pr(var), i.e., the prior density."""
-        al, be = self.alpha, self.beta
-        return be**(-al)/gamma(al) * var**(-1.-al) * np.exp(-1./(be*var))
-
-    def _post_params(self, D):
-        try:
-            n = len(D)
-        except TypeError:
-            n = 1
-        al_n = self.alpha + n  # it's + n/2.0 in InvGamma, but in 2D it's + n.
-        be_n = 1./(1./self.beta + 0.5*np.sum((np.array(D)-self.mu)**2))  # Same formula for beta.
-        return al_n, be_n, self.mu
-
-    def pred(self, x):
-        """Prior predictive.  Pr(x)"""
-        assert isinstance(x, np.ndarray)
-        assert x.shape[-1] == 2
-        # Is this a multivariate t?  Definitely a nearly blind guess here.
-        return multivariate_t_density(2*self.alpha, self.mu, self.beta/self.alpha*np.eye(2), x)
-
-    def evidence(self, D):
-        """Fully marginalized likelihood Pr(D)"""
-        raise NotImplementedError
+        """Return Pr(D) = \int Pr(D | theta) Pr(theta)"""
+        shape = D.shape
+        if len(shape) == 2:
+            n, d = shape
+        elif len(shape) == 1:
+            n, d = 1, shape[0]
+        assert d == self.d
+        # Eq (266)
+        mu_n, kappa_n, Lam_n, nu_n = self._post_params(D)
+        detLam0 = np.linalg.det(self.Lam_0)
+        detLamn = np.linalg.det(Lam_n)
+        num = gammad(d, nu_n/2.0) * detLam0**(self.nu_0/2.0)
+        den = np.pi**(n*d/2.0) * gammad(d, self.nu_0/2.0) * detLamn**(nu_n/2.0)
+        return num/den * (self.kappa_0/kappa_n)**(d/2.0)
