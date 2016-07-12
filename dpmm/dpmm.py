@@ -1,5 +1,3 @@
-import itertools
-
 import numpy as np
 from utils import pick_discrete
 from data import PseudoMarginalData, NullManip
