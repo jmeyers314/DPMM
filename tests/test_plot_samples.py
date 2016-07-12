@@ -3,8 +3,9 @@ import matplotlib.pyplot as plt
 import dpmm
 from test_utils import timer
 from dpmm.utils import plot_ellipse, random_wish, random_invwish
+from unittest import skip
 
-
+@skip
 @timer
 def test_GaussianMeanKnownVariance():
     mu_0 = 1.1
@@ -29,6 +30,7 @@ def test_GaussianMeanKnownVariance():
     f.savefig("plots/GaussianMeanKnownVariance_samples.png")
 
 
+@skip
 @timer
 def test_InvGamma():
     alpha = 1.4
@@ -53,6 +55,7 @@ def test_InvGamma():
     f.savefig("plots/InvGamma_samples.png")
 
 
+@skip
 @timer
 def test_NormInvChi2():
     mu_0 = 1.5
@@ -93,7 +96,7 @@ def test_NormInvChi2():
     ax.set_title("NormInvChi2")
     f.savefig("plots/NormInvChi2_var_samples.png")
 
-
+@skip
 @timer
 def test_NormInvGamma():
     mu_0 = 1.5
@@ -135,6 +138,7 @@ def test_NormInvGamma():
     f.savefig("plots/NormInvGamma_var_samples.png")
 
 
+@skip
 @timer
 def test_NormInvWish():
     mu_0 = np.r_[0.3, -0.2]
@@ -181,6 +185,7 @@ def test_NormInvWish():
     f.savefig("plots/NormInvWish_samples.png")
 
 
+@skip
 @timer
 def test_random_wish():
     dof = 3
@@ -194,6 +199,7 @@ def test_random_wish():
     print "<wish> = \n{}\n +/-\n{}".format(mean, std)
 
 
+@skip
 @timer
 def test_random_invwish():
     dof = 6
@@ -209,6 +215,7 @@ def test_random_invwish():
     print "<invwish> = \n{}\n +/-\n{}".format(mean, std)
 
 
+@skip
 @timer
 def test_ellipse_plotter():
     f = plt.figure(figsize=(7, 7))

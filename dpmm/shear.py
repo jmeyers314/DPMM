@@ -2,15 +2,15 @@ import numpy as np
 
 
 def unshear(D, g):
-    D1, D2 = D[:, 0], D[:, 1]  # real and imag parts of the data.
+    D1, D2 = D[..., 0], D[..., 1]  # real and imag parts of the data.
     g1, g2 = g[0], g[1]  # real and imag parts of the shear.
     a, b = D1 - g1, D2 - g2
     c, d = (1.0 - g1*D1 - g2*D2), g2*D1 - g1*D2
     # Now divide (a + bi) / (c + di) = 1/(c*c + d*d) * ((ac+bd) + i(bc - ad))
     out = np.empty_like(D)
     den = c**2 + d**2
-    out[:, 0] = (a*c + b*d)/den
-    out[:, 1] = (b*c - a*d)/den
+    out[..., 0] = (a*c + b*d)/den
+    out[..., 1] = (b*c - a*d)/den
     return out
 
 
@@ -157,7 +157,7 @@ class Shear(object):
         current_lnlike = 0.0
         prop_lnlike = 0.0
         for i, ph in enumerate(phi):
-            index = np.nonzero(label == i)
+            index = label == i
             current_lnlike += prior.lnlikelihood(current_e_int[index], ph)
             prop_lnlike += prior.lnlikelihood(prop_e_int[index], ph)
         if prop_lnlike > current_lnlike:

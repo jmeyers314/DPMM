@@ -64,7 +64,7 @@ def test_t_density():
 
 
 @timer
-def test_multivariate_t_density(args):
+def test_multivariate_t_density(full=False):
     nu = 3
     mu = np.r_[1., 2.]
     Sig = np.eye(2)+0.1
@@ -75,7 +75,7 @@ def test_multivariate_t_density(args):
     np.testing.assert_almost_equal(
             r[0], 1.0, 5, "multivariate_t_density does not integrate to 1.0")
 
-    if args.full:
+    if full:
         # test mean
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
@@ -131,4 +131,4 @@ if __name__ == "__main__":
 
     test_scaled_IX_density()
     test_t_density()
-    test_multivariate_t_density(args)
+    test_multivariate_t_density(args.full)

@@ -28,7 +28,7 @@ class DPMM(object):
 
         # Initialize r_i array
         # This is Neal (2000) equation (3.4) without the b factor.
-        self.r_i = self.alpha * self.prior.pred(self.mD)
+        self.p = self.alpha * self.prior.pred(self.mD)[:, np.newaxis]
 
         if phi is None:
             self.init_phi()
@@ -41,12 +41,9 @@ class DPMM(object):
         self.label = np.zeros((self.n), dtype=int)
         self.phi = []
         self.nphi = []
-        # Seed the first data element to it's own cluster.
-        self.phi.append(self.prior.post(self.mD[0]).sample())
-        self.nphi.append(1)
-        # And then let the rest percolate off of that.
-        for i in xrange(1, self.n):
+        for i in xrange(self.n):
             self.update_c_i(i)
+        self.update_phi()
 
     @property
     def mD(self):
@@ -65,19 +62,14 @@ class DPMM(object):
 
     def draw_new_label(self, i):
         # This is essentially Neal (2000) equation (3.6)
-        # Start with probabilities for cloning an existing cluster, and then append the probability
-        # to create a new cluster.
-        p = np.empty(len(self.phi)+1, dtype=float)
-        p[:-1] = self.prior.like1(self.mD[i], np.array(self.phi)) * np.array(self.nphi)
-        p[-1] = self.r_i[i]
         # Note that the p probabilities are unnormalized here, but pick_discrete will rescale them
         # so that the total probability is 1.0.  This normalization also captures the factors of
         # b/(n-1+alpha) in Neal (2000).
-        picked = pick_discrete(p)
+        picked = pick_discrete(self.p[i]) - 1  # -1 is sentinel for "make a new cluster"
         return picked
 
     def del_c_i(self, i):
-        # De-associate the ith data point from its cluster.
+        """De-associate the ith data point from its cluster."""
         label = self.label[i]
         # We're about to assign this point to a new cluster, so decrement current cluster count.
         self.nphi[label] -= 1
@@ -86,19 +78,26 @@ class DPMM(object):
             del self.phi[label]
             del self.nphi[label]
             # Need to decrement label numbers for labels greater than the one deleted...
-            self.label[np.nonzero(self.label >= label)] -= 1
+            self.label[self.label >= label] -= 1
+            # And remove the corresponding probability column
+            self.p = np.delete(self.p, label+1, axis=1)
 
     def update_c_i(self, i):
         # for deduplication
         # Neal (2000) equation 3.6.  See draw_new_label above.
-        new_label = self.draw_new_label(i)
-        self.label[i] = new_label
+        label = self.draw_new_label(i)
         # If we selected to create a new cluster, then draw parameters for that cluster.
-        if new_label == len(self.phi):
-            self.phi.append(self.prior.post(self.mD[i]).sample())
+        if label == -1:
+            new_phi = self.prior.post(self.mD[i]).sample()
+            self.phi.append(new_phi)
             self.nphi.append(1)
+            self.label[i] = len(self.phi)-1
+            # Also need to add probabilities for this new phi for gals between i+1 and n.
+            self.p = np.append(self.p, np.zeros((self.n, 1), dtype=float), axis=1)
+            self.p[i+1:, -1] = self.prior.like1(self.mD[i+1:], new_phi)
         else:  # Otherwise just increment the count for the cloned cluster.
-            self.nphi[new_label] += 1
+            self.label[i] = label
+            self.nphi[label] += 1
 
     def update_c(self):
         # This is the first bullet for Neal (2000) algorithm 2, updating the labels for each data
@@ -110,10 +109,15 @@ class DPMM(object):
 
     def update_phi(self):
         # This is the second bullet for Neal (2000) algorithm 2, updating the parameters phi of each
-        # cluster conditional on that clusters currently associated data members.
+        # cluster conditional on that cluster's currently associated data members.
+        tot = 0
         for i in xrange(len(self.phi)):
-            data = self.mD[np.nonzero(self.label == i)]
-            self.phi[i] = self.prior.post(data).sample()
+            index = self.label == i
+            tot += sum(index)
+            data = self.mD[index]  # nonzero needed?
+            new_phi = self.prior.post(data).sample()
+            self.phi[i] = new_phi
+        self.p[:, 1:] = self.prior.like1(self.mD[:, np.newaxis], np.array(self.phi))
 
     def update_latent_data(self):
         # Update the latent "true" data in the case that the data is represented by a
@@ -124,11 +128,12 @@ class DPMM(object):
                 data = self._D[index]  # a PseudoMarginalData instance
                 # calculate weights for selecting a representative sample
                 ps = self.prior.like1(self.manip(data.data), ph) / data.interim_prior
-                ps /= np.sum(ps, axis=1)[:, np.newaxis]
+                ps /= np.sum(ps, axis=1)[:, np.newaxis]  # think this line can go.
                 for j, p in enumerate(ps):
                     self.D[index[0][j]] = data.data[j, pick_discrete(p)]
             # Need to update the r_i probabilities too since self.D changed.
-            self.r_i = self.alpha * self.prior.pred(self.mD)
+            # self.r_i = self.alpha * self.prior.pred(self.mD)
+            self.p[:, 0] = self.alpha * self.prior.pred(self.mD)
             self.manip_needs_update = True
         else:
             pass  # If data is already a numpy array, there's nothing to update.
