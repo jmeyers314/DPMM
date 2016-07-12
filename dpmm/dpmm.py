@@ -72,9 +72,9 @@ class DPMM(object):
         p = np.empty(len(self.phi)+1, dtype=float)
         p[:-1] = self.prior.like1(self.mD[i], np.array(self.phi)) * np.array(self.nphi)
         p[-1] = self.r_i[i]
-        # Normalize.  This essentially takes care of the factors of b/(n-1+alpha) in Neal (2000)
-        # equation (3.6)
-        p /= np.sum(p)
+        # Note that the p probabilities are unnormalized here, but pick_discrete will rescale them
+        # so that the total probability is 1.0.  This normalization also captures the factors of
+        # b/(n-1+alpha) in Neal (2000).
         picked = pick_discrete(p)
         return picked
 

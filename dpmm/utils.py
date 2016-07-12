@@ -47,10 +47,12 @@ def random_invwish(dof, invS, size=None):
 
 
 def pick_discrete(p):
-    """Pick a discrete integer between 0 and len(p) - 1 with probability given by p array."""
+    """Pick a discrete integer between 0 and len(p) - 1 with probability given by (normalized) p
+    array.  Note that p array will be normalized here."""
     c = np.cumsum(p)
+    c /= c[-1] # Normalize
     u = np.random.uniform()
-    return bisect.bisect_left(c, u)
+    return bisect.bisect(c, u)
 
 
 # Modified code from http://stackoverflow.com/questions/9081553/python-scatter-plot-size-and-style-of-the-marker/24567352#24567352
