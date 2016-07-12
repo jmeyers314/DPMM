@@ -35,35 +35,40 @@ class Prior(object):
         self._post = post
 
     def sample(self, size=None):
-        """Return one or more samples from prior distribution."""
+        """Return one or more samples of the model parameters from prior distribution."""
         raise NotImplementedError
 
     def like1(self, x, *args, **kwargs):
-        """Return likelihood for single data element.  Pr(x | theta)"""
+        """Return likelihood for single data element.  Pr(x | theta).  This is conditionally
+        independent of the hyperparameters psi.  If more than one data element is passed, then the
+        likelihood will be returned for each element."""
         raise NotImplementedError
 
     def likelihood(self, D, *args, **kwargs):
         # It's quite likely overriding this will yield faster results...
-        """Returns Pr(D | theta)."""
-        return reduce(mul, (self.like1(x, *args, **kwargs) for x in D), 1.0)
+        """Returns Pr(D | theta).  Does not broadcast over theta!"""
+        return np.prod(self.like1(D, *args, **kwargs))
 
     def lnlikelihood(self, D, *args, **kwargs):
+        """Returns ln(Pr(D | theta)).  Does not broadcast over theta!"""
         return np.log(self.likelihood(D, *args, **kwargs))
 
     def __call__(self, *args):
-        """Returns Pr(theta), i.e. the prior probability."""
+        """Returns Pr(theta | psi), i.e. the prior probability."""
         raise NotImplementedError
 
     def _post_params(self, D):
-        """Returns new parameters for updating prior->posterior by initializing new object."""
+        """Returns new hyperparameters psi' for updating prior->posterior.  Can be sent to
+        constructor to initialize a new object."""
         raise NotImplementedError
 
     def post(self, D):
-        """Returns new Prior with updated params for prior->posterior."""
+        """Returns new Prior object using updated hyperparameters psi, which is the posterior given
+        the data D."""
         return self._post(*self._post_params(D))
 
     def pred(self, x):
-        """Prior predictive.  Pr(x | params)"""
+        """Prior predictive.  Pr(x | params).  Integrates out theta."""
         raise NotImplementedError
 
 

@@ -199,9 +199,9 @@ def test_NormInvChi2():
 
     nix = dpmm.NormInvChi2(mu_0, kappa_0, sigsqr_0, nu_0)
 
-    D = [1.0, 2.0, 3.0]
-    mus = [1.1, 1.2, 1.3]
-    vars_ = [1.2, 3.2, 2.3]
+    D = np.r_[1.0, 2.0, 3.0]
+    mus = np.r_[1.1, 1.2, 1.3]
+    vars_ = np.r_[1.2, 3.2, 2.3]
 
     # Check prior density
     with warnings.catch_warnings():
@@ -274,9 +274,9 @@ def test_NormInvGamma():
 
     nig = dpmm.NormInvGamma(m_0, V_0, a_0, b_0)
 
-    D = [1.0, 2.0, 3.0]
-    mus = [1.1, 1.2, 1.3]
-    vars_ = [1.2, 3.2, 2.3]
+    D = np.r_[1.0, 2.0, 3.0]
+    mus = np.r_[1.1, 1.2, 1.3]
+    vars_ = np.r_[1.2, 3.2, 2.3]
 
     # Check prior density
     with warnings.catch_warnings():
