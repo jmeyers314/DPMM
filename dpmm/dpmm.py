@@ -125,13 +125,13 @@ class DPMM(object):
         # Pseudo-marginal samples or (TBD) means and Gaussian errors.
         if isinstance(self._D, PseudoMarginalData):
             for i, ph in enumerate(self.phi):
-                index = np.nonzero(self.label == i)
+                index = np.nonzero(self.label == i)[0]
                 data = self._D[index]  # a PseudoMarginalData instance
                 # calculate weights for selecting a representative sample
                 ps = self.prior.like1(self.manip(data.data), ph) / data.interim_prior
                 ps /= np.sum(ps, axis=1)[:, np.newaxis]  # think this line can go.
                 for j, p in enumerate(ps):
-                    self.D[index[0][j]] = data.data[j, pick_discrete(p)]
+                    self.D[index[j]] = data.data[j, pick_discrete(p)]
             # Need to update the r_i probabilities too since self.D changed.
             # self.r_i = self.alpha * self.prior.pred(self.mD)
             self.p[:, 0] = self.alpha * self.prior.pred(self.mD)
