@@ -160,8 +160,8 @@ class Shear(object):
         prop_lnlike = 0.0
         for i, ph in enumerate(phi):
             index = np.nonzero(label == i)
-            current_lnlike += prior.lnlikelihood(current_e_int[index], *ph)
-            prop_lnlike += prior.lnlikelihood(prop_e_int[index], *ph)
+            current_lnlike += prior.lnlikelihood(current_e_int[index], ph)
+            prop_lnlike += prior.lnlikelihood(prop_e_int[index], ph)
         if prop_lnlike > current_lnlike:
             self.g = prop_g
             self.Nacceptances += 1

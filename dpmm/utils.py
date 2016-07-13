@@ -27,28 +27,32 @@ def gammad(d, nu_over_2):
     return np.pi**(d*(d-1.)/4)*np.multiply.reduce([gamma(0.5*(nu+1-i)) for i in range(d)])
 
 
-def random_wish(dof, S, size=1):
+def random_wish(dof, S, size=None):
     dim = S.shape[0]
-    if size == 1:
+    if size is None:
         x = np.random.multivariate_normal(np.zeros(dim), S, size=dof)
         return np.dot(x.T, x)
     else:
-        out = np.empty((size, dim, dim), dtype=np.float64)
-        for i in range(size):
+        if isinstance(size, int):
+            size = (size,)
+        out = np.empty(size+(dim, dim), dtype=np.float64)
+        for ind in np.ndindex(size):
             x = np.random.multivariate_normal(np.zeros(dim), S, size=dof)
-            out[i] = np.dot(x.T, x)
+            out[ind] = np.dot(x.T, x)
         return out
 
 
-def random_invwish(dof, invS, size=1):
+def random_invwish(dof, invS, size=None):
     return np.linalg.inv(random_wish(dof, invS, size=size))
 
 
 def pick_discrete(p):
-    """Pick a discrete integer between 0 and len(p) - 1 with probability given by p array."""
+    """Pick a discrete integer between 0 and len(p) - 1 with probability given by (normalized) p
+    array.  Note that p array will be normalized here."""
     c = np.cumsum(p)
+    c /= c[-1] # Normalize
     u = np.random.uniform()
-    return bisect.bisect_left(c, u)
+    return bisect.bisect(c, u)
 
 
 # Modified code from http://stackoverflow.com/questions/9081553/python-scatter-plot-size-and-style-of-the-marker/24567352#24567352

@@ -1,6 +1,5 @@
 import numpy as np
 from scipy.special import gamma
-from utils import vTmv
 
 
 def multivariate_t_density(nu, mu, Sig, x):
@@ -10,12 +9,11 @@ def multivariate_t_density(nu, mu, Sig, x):
     d = len(mu)
     coef = gamma(nu/2.0+d/2.0) * detSig**(-0.5)
     coef /= gamma(nu/2.0) * nu**(d/2.0)*np.pi**(d/2.0)
-    x = np.array(x)
-    if len(x.shape) == 1:
-        return coef * (1.0 + 1./nu*vTmv((x-mu).T, invSig)[0, 0])**(-(nu+d)/2.0)
+    if x.ndim == 1:
+        einsum = np.dot(x-mu, np.dot(invSig, x-mu))
     else:
-        prod = np.array([vTmv(x_.T, invSig)[0, 0] for x_ in (x-mu)])
-        return coef * (1.0 + prod/nu)**(-(nu+d)/2.0)
+        einsum = np.einsum("...i,ij,...j", x-mu, invSig, x-mu) # (x-mu).T * invSig * (x-mu)
+    return coef * (1.0 + einsum/nu)**(-(nu+d)/2.0)
 
 
 def t_density(nu, mu, sigsqr, x):

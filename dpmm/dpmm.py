@@ -1,5 +1,3 @@
-import itertools
-
 import numpy as np
 from utils import pick_discrete
 from data import PseudoMarginalData, NullManip
@@ -43,7 +41,11 @@ class DPMM(object):
         self.label = np.zeros((self.n), dtype=int)
         self.phi = []
         self.nphi = []
-        for i in xrange(self.n):
+        # Seed the first data element to it's own cluster.
+        self.phi.append(self.prior.post(self.mD[0]).sample())
+        self.nphi.append(1)
+        # And then let the rest percolate off of that.
+        for i in xrange(1, self.n):
             self.update_c_i(i)
 
     @property
@@ -63,16 +65,14 @@ class DPMM(object):
 
     def draw_new_label(self, i):
         # This is essentially Neal (2000) equation (3.6)
-        # Start off with the probabilities for cloning an existing cluster:
-        p = [l1 * nphi
-             for l1, nphi in itertools.izip(self.prior.like1N(self.mD[i], self.phi),
-                                            self.nphi)]
-        # and then append the probability to create a new cluster.
-        p.append(self.r_i[i])
-        p = np.array(p)
-        # Normalize.  This essentially takes care of the factors of b/(n-1+alpha) in Neal (2000)
-        # equation (3.6)
-        p /= np.sum(p)
+        # Start with probabilities for cloning an existing cluster, and then append the probability
+        # to create a new cluster.
+        p = np.empty(len(self.phi)+1, dtype=float)
+        p[:-1] = self.prior.like1(self.mD[i], np.array(self.phi)) * np.array(self.nphi)
+        p[-1] = self.r_i[i]
+        # Note that the p probabilities are unnormalized here, but pick_discrete will rescale them
+        # so that the total probability is 1.0.  This normalization also captures the factors of
+        # b/(n-1+alpha) in Neal (2000).
         picked = pick_discrete(p)
         return picked
 
@@ -123,7 +123,7 @@ class DPMM(object):
                 index = np.nonzero(self.label == i)[0]
                 data = self._D[index]  # a PseudoMarginalData instance
                 # calculate weights for selecting a representative sample
-                ps = self.prior.like1(self.manip(data.data), *ph) / data.interim_prior
+                ps = self.prior.like1(self.manip(data.data), ph) / data.interim_prior
                 ps /= np.sum(ps, axis=1)[:, np.newaxis]
                 for j, p in enumerate(ps):
                     self.D[index[j]] = data.data[j, pick_discrete(p)]
