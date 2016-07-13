@@ -65,7 +65,8 @@ class DPMM(object):
         # Note that the p probabilities are unnormalized here, but pick_discrete will rescale them
         # so that the total probability is 1.0.  This normalization also captures the factors of
         # b/(n-1+alpha) in Neal (2000).
-        picked = pick_discrete(self.p[i]) - 1  # -1 is sentinel for "make a new cluster"
+        # -1 is sentinel for "make a new cluster"
+        picked = pick_discrete(self.p[i]*np.append([1], self.nphi)) - 1
         return picked
 
     def del_c_i(self, i):
