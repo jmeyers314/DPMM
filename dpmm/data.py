@@ -4,12 +4,15 @@ from utils import pick_discrete
 
 class PseudoMarginalData(object):
     def __init__(self, data, interim_prior):
-        # Data should have dims [NOBJ, NSAMPLE, NDIM]
+        # Data should have dims [NOBJ, NSAMPLE, NDIM] or [NOBJ, NSAMPLE] if NDIM is 1
         # interim_prior should have dims [NOBJ, NSAMPLE]
         self.data = data
         self.interim_prior = interim_prior
 
-        self.nobj, self.nsample, self.ndim = self.data.shape
+        if self.data.ndim == 2:
+            self.nobj, self.nsample = self.data.shape
+        else:
+            self.nobj, self.nsample, self.ndim = self.data.shape
 
         if self.interim_prior.shape != (self.nobj, self.nsample):
             ds = self.data.shape
