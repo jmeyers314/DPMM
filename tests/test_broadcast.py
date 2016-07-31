@@ -920,8 +920,7 @@ def test_NormInvWish():
     assert arr.shape == (2, 4)
     assert arr.dtype == float
     for (i, j), r in np.ndenumerate(arr):
-        assert r == prior.pred(x[i, j])
-
+        np.testing.assert_almost_equal(r, prior.pred(x[i, j]))
 
 if __name__ == '__main__':
     test_GaussianMeanKnownVariance()
